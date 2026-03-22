@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty | Admin</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        
+        <navbar></navbar>
+
+        <main class="max-w-7xl mx-auto px-6 py-10">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- PROVISIONING FORM -->
+                <div class="lg:col-span-4 h-fit sticky top-24">
+                    <div class="admin-card">
+                        <h2 class="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mb-6">Faculty Provisioning</h2>
+                        <form @submit.prevent="createTeacher" class="space-y-4">
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Full Name</label>
+                                <input v-model="newTeacher.display_name" type="text" placeholder="Instructor Name" class="input-field text-sm" required>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Registration ID</label>
+                                <input v-model="newTeacher.registration_id" type="text" placeholder="FAC-XXX" class="input-field text-sm font-mono" required>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Password</label>
+                                <input v-model="newTeacher.password" type="password" placeholder="••••••••" class="input-field text-sm" required>
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-white text-black text-[10px] font-bold uppercase rounded-xl transition hover:bg-zinc-200 mt-4">Create Account</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- DIRECTORY LIST -->
+                <div class="lg:col-span-8">
+                    <div class="flex items-center justify-between mb-6 px-1">
+                        <h2 class="text-2xl font-bold text-white tracking-tight">Faculty Directory</h2>
+                        <div class="relative w-64">
+                            <input v-model="teacherSearch" type="text" placeholder="Search instructors..." class="input-field py-1.5 pl-8 text-xs">
+                            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg>
+                        </div>
+                    </div>
+
+                    <div class="admin-card !p-0 overflow-hidden shadow-2xl">
+                        <table class="w-full teacher-table text-sm text-left">
+                            <thead class="bg-black/20">
+                                <tr>
+                                    <th>Instructor</th>
+                                    <th>Credentials</th>
+                                    <th class="text-right">Management</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="t in filteredTeachers" :key="t.id" class="group hover:bg-white/[0.01]">
+                                    <td>
+                                        <p class="text-white font-medium">{{ t.display_name }}</p>
+                                        <p class="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">Faculty Member</p>
+                                    </td>
+                                    <td class="font-mono text-xs text-blue-500 uppercase">{{ t.registration_id }}</td>
+                                    <td class="text-right">
+                                        <div class="flex justify-end items-center gap-4">
+                                            <button @click="openAssignModal(t)" class="text-[10px] font-bold text-zinc-400 hover:text-white uppercase tracking-widest transition">Assign Subjects</button>
+                                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                <button @click="openEditModal(t)" class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+                                                <button @click="deleteTeacher(t.id)" class="action-icon del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- ASSIGNMENT MODAL -->
+        <div v-if="assignModal.show" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div class="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-3xl p-10 shadow-2xl">
+                <header class="mb-8">
+                    <h3 class="text-white font-bold text-xl mb-1">Subject Assignments</h3>
+                    <p class="text-xs text-zinc-500 uppercase tracking-widest">Instructor: <span class="text-white font-bold">{{ selectedTeacher?.display_name }}</span></p>
+                </header>
+                
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-8 bg-black/30 p-5 rounded-2xl border border-zinc-800">
+                    <div class="md:col-span-5">
+                        <label class="text-[9px] font-bold text-zinc-500 uppercase mb-1.5 block">Class Group</label>
+                        <!-- CHANGE: calls fetchClassSubjects on change -->
+                        <select v-model="newAssign.class_id" @change="fetchClassSubjects" class="input-field text-xs">
+                            <option :value="null">Select Class...</option>
+                            <option v-for="c in allClasses" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-5">
+                        <label class="text-[9px] font-bold text-zinc-500 uppercase mb-1.5 block">Subject</label>
+                        <select v-model="newAssign.subject_id" :disabled="!newAssign.class_id || loadingSubjects" class="input-field text-xs disabled:opacity-30">
+                            <option :value="null">{{ loadingSubjects ? 'Loading...' : 'Select Subject...' }}</option>
+                            <option v-for="s in availableSubjects" :key="s.id" :value="s.id">{{ s.name }} ({{ s.code }})</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2 flex items-end">
+                        <button @click="addAssignment" :disabled="!newAssign.subject_id" class="w-full h-[42px] bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition disabled:opacity-30">
+                            <svg class="mx-auto" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14m-7-7v14"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-for="a in currentAssignments" :key="a.id" class="assignment-pill p-4 rounded-2xl flex justify-between items-center group">
+                        <div>
+                            <p class="text-[10px] text-blue-500 font-bold uppercase tracking-widest mb-1">{{ a.subject_name }}</p>
+                            <p class="text-sm text-white font-medium">{{ a.class_name }}</p>
+                        </div>
+                        <button @click="removeAssignment(a)" class="action-icon del opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-10 flex justify-end">
+                    <button @click="assignModal.show = false" class="py-3 px-10 bg-zinc-800 text-zinc-400 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:text-white transition">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- EDIT TEACHER MODAL -->
+        <div v-if="editModal.show" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div class="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-3xl p-10 shadow-2xl">
+                <h3 class="text-white font-bold text-xl mb-2">Update Faculty</h3>
+                <p class="text-[10px] text-zinc-500 uppercase tracking-widest mb-8">Profile Configuration</p>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase mb-1 block">Full Name</label>
+                        <input v-model="editModal.data.display_name" type="text" class="input-field text-sm">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase mb-1 block">Registration ID</label>
+                        <input v-model="editModal.data.registration_id" type="text" class="input-field text-sm font-mono uppercase">
+                    </div>
+                    <div class="pt-4 border-t border-zinc-800">
+                        <label class="text-[10px] font-bold text-amber-500 uppercase mb-1 block">Update Password (Optional)</label>
+                        <input v-model="editModal.data.password" type="password" placeholder="••••••••" class="input-field text-sm border-amber-900/20">
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-10">
+                    <button @click="editModal.show = false" class="flex-1 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-[10px] font-bold uppercase transition hover:text-white">Cancel</button>
+                    <button @click="submitEdit" class="flex-1 py-3 bg-white text-black rounded-xl text-[10px] font-bold uppercase transition hover:bg-zinc-200">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const teachers = ref([]); const allClasses = ref([]);
+                const availableSubjects = ref([]); // Filtered list based on class selection
+                const teacherSearch = ref('');
+                const selectedTeacher = ref(null);
+                const currentAssignments = ref([]);
+                const loadingSubjects = ref(false);
+                
+                const newTeacher = ref({ display_name: '', registration_id: '', password: '' });
+                const assignModal = ref({ show: false });
+                const newAssign = ref({ class_id: null, subject_id: null });
+                const editModal = ref({ show: false, data: {} });
+
+                const loadData = async () => {
+                    const [resT, resC] = await Promise.all([
+                        api.get('/api/admin/users?role=teacher'),
+                        api.get('/api/admin/classes')
+                    ]);
+                    teachers.value = resT || [];
+                    allClasses.value = resC || [];
+                };
+
+                const filteredTeachers = computed(() => {
+                    if (!teacherSearch.value) return teachers.value;
+                    const q = teacherSearch.value.toLowerCase();
+                    return teachers.value.filter(t => t.display_name.toLowerCase().includes(q) || t.registration_id.toLowerCase().includes(q));
+                });
+
+                // NEW: Fetches only the subjects linked to the selected Class Group
+                const fetchClassSubjects = async () => {
+                    if (!newAssign.value.class_id) { availableSubjects.value = []; return; }
+                    loadingSubjects.value = true;
+                    try {
+                        availableSubjects.value = await api.get(`/api/admin/classes/${newAssign.value.class_id}/subjects-detailed`) || [];
+                        newAssign.value.subject_id = null;
+                    } catch (e) { console.error("Subject fetch error"); }
+                    finally { loadingSubjects.value = false; }
+                };
+
+                const createTeacher = async () => {
+                    try {
+                        await api.post('/api/admin/teachers', newTeacher.value);
+                        newTeacher.value = { display_name: '', registration_id: '', password: '' };
+                        await loadData();
+                    } catch (e) { alert('Provisioning failed.'); }
+                };
+
+                const openAssignModal = async (t) => {
+                    selectedTeacher.value = t;
+                    assignModal.value.show = true;
+                    newAssign.value = { class_id: null, subject_id: null };
+                    availableSubjects.value = [];
+                    currentAssignments.value = await api.get(`/api/admin/faculty-assignments/${t.id}`) || [];
+                };
+
+                const addAssignment = async () => {
+                    try {
+                        await api.post('/api/admin/faculty-assignments', {
+                            teacher_id: selectedTeacher.value.id,
+                            ...newAssign.value
+                        });
+                        currentAssignments.value = await api.get(`/api/admin/faculty-assignments/${selectedTeacher.value.id}`);
+                        newAssign.value.subject_id = null;
+                    } catch (e) { alert("Assignment conflict."); }
+                };
+
+                const removeAssignment = async (a) => {
+                    if (!confirm(`Revoke assignment for ${a.subject_name} in ${a.class_name}?`)) return;
+                    await api.delete(`/api/admin/faculty-assignments/${a.id}`);
+                    currentAssignments.value = await api.get(`/api/admin/faculty-assignments/${selectedTeacher.value.id}`);
+                };
+
+                const openEditModal = (t) => { editModal.value = { show: true, data: { ...t, password: '' } }; };
+                
+                const submitEdit = async () => {
+                    await api.put(`/api/admin/teachers/${editModal.value.data.id}`, editModal.value.data);
+                    editModal.value.show = false; 
+                    await loadData();
+                };
+
+                const deleteTeacher = async (id) => {
+                    if (!confirm("Revoke faculty system access permanently?")) return;
+                    await api.delete(`/api/admin/teachers/${id}`); 
+                    await loadData();
+                };
+
+                const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('role'); window.location.href = '/'; };
+
+                onMounted(loadData);
+                return { config, teachers, filteredTeachers, teacherSearch, allClasses, availableSubjects, loadingSubjects, newTeacher, assignModal, newAssign, currentAssignments, selectedTeacher, editModal, openAssignModal, fetchClassSubjects, addAssignment, removeAssignment, openEditModal, submitEdit, deleteTeacher, logout };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

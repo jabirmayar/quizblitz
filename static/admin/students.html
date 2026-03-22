@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Students | Admin</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        
+        <navbar></navbar>
+
+        <main class="max-w-7xl mx-auto px-6 py-10">
+            
+            <header class="mb-8">
+                <h2 class="text-3xl font-bold text-white tracking-tight">Student Directory</h2>
+                <p class="text-zinc-500 mt-1">Refine your view using department and session hierarchies.</p>
+            </header>
+
+            <!-- Hierarchical Filter Console -->
+            <section class="filter-card p-6 rounded-2xl mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <!-- Search -->
+                    <div class="md:col-span-1">
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Search Identity</label>
+                        <div class="relative">
+                            <input v-model="search" type="text" placeholder="Name or ID..." class="input-field text-sm pl-9">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2"/></svg>
+                        </div>
+                    </div>
+                    <!-- Dept -->
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Department</label>
+                        <select v-model="filters.deptId" @change="onDeptChange" class="input-field text-sm cursor-pointer">
+                            <option :value="null">All Departments</option>
+                            <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
+                        </select>
+                    </div>
+                    <!-- Session -->
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Session</label>
+                        <select v-model="filters.semId" @change="onSessionChange" :disabled="!filters.deptId" class="input-field text-sm cursor-pointer disabled:opacity-30">
+                            <option :value="null">All Sessions</option>
+                            <option v-for="s in sems" :key="s.id" :value="s.id">{{ s.season }} {{ s.year }}</option>
+                        </select>
+                    </div>
+                    <!-- Class Group -->
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Class Group</label>
+                        <select v-model="filters.classId" :disabled="!filters.semId" class="input-field text-sm cursor-pointer disabled:opacity-30">
+                            <option :value="null">All Class Groups</option>
+                            <option v-for="c in classes" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Table Workspace -->
+            <div class="admin-card !p-0 overflow-hidden shadow-2xl">
+                <table class="w-full student-table text-sm text-left">
+                    <thead class="bg-black/20">
+                        <tr>
+                            <th class="w-12 text-center">
+                                <input type="checkbox" @change="toggleAll" :checked="isAllSelected" class="w-4 h-4 rounded border-zinc-800 bg-black text-blue-600 focus:ring-0">
+                            </th>
+                            <th>Student</th>
+                            <th>Current Class</th>
+                            <th>Enrollment</th>
+                            <th class="text-right">Access</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="s in filteredStudents" :key="s.id" class="group hover:bg-white/[0.01] transition-colors">
+                            <td class="text-center">
+                                <input type="checkbox" :value="s.id" v-model="selectedIds" class="w-4 h-4 rounded border-zinc-800 bg-black text-blue-600 focus:ring-0">
+                            </td>
+                            <td>
+                                <p class="text-white font-medium">{{ s.display_name }}</p>
+                                <p class="text-[10px] text-zinc-500 font-mono uppercase tracking-tighter">{{ s.registration_id }}</p>
+                            </td>
+                            <td>
+                                <span class="text-[11px] text-blue-400 font-bold uppercase tracking-tight">{{ s.class_name }}</span>
+                            </td>
+                            <td class="text-zinc-500 text-xs font-mono">
+                                {{ new Date(s.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) }}
+                            </td>
+                            <td class="text-right">
+                                <button @click="openResetModal(s)" class="text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest transition">Reset Password</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bulk Pill -->
+            <transition name="fade">
+                <div v-if="selectedIds.length > 0" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 bulk-pill px-6 py-3.5 rounded-2xl flex items-center gap-8">
+                    <span class="text-xs font-bold text-white">{{ selectedIds.length }} Selected</span>
+                    <div class="h-6 w-px bg-zinc-800"></div>
+                    <div class="flex items-center gap-4">
+                        <select v-model="destinationClassId" class="bg-black border border-zinc-800 text-zinc-300 text-[10px] font-bold px-4 py-2 rounded-xl uppercase tracking-wider">
+                            <option :value="null">Target Class Group...</option>
+                            <option v-for="c in allClasses" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                        <button @click="bulkMove" class="bg-blue-600 text-white text-[10px] font-bold px-6 py-2.5 rounded-xl uppercase tracking-widest hover:bg-blue-500 transition shadow-lg shadow-blue-900/20">Execute Move</button>
+                    </div>
+                </div>
+            </transition>
+        </main>
+
+        <!-- PASSWORD RESET MODAL -->
+        <div v-if="resetModal.show" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div class="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-3xl p-10 shadow-2xl text-center">
+                <h3 class="text-white font-bold text-xl mb-2">Reset Password</h3>
+                <p class="text-xs text-zinc-500 mb-8 uppercase tracking-widest">Update credentials for {{ resetModal.user?.display_name }}</p>
+                <input v-model="resetModal.password" type="text" placeholder="Enter new password" class="input-field text-sm text-center">
+                <div class="flex gap-3 mt-10">
+                    <button @click="resetModal.show = false" class="flex-1 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-[10px] font-bold uppercase tracking-widest">Cancel</button>
+                    <button @click="submitReset" class="flex-1 py-3 bg-white text-black rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const students = ref([]);
+                const departments = ref([]);
+                const sems = ref([]);
+                const classes = ref([]);
+                const allClasses = ref([]); // For bulk move target selection
+                
+                const search = ref('');
+                const filters = ref({ deptId: null, semId: null, classId: null });
+                
+                const selectedIds = ref([]);
+                const destinationClassId = ref(null);
+                const resetModal = ref({ show: false, user: null, password: '' });
+
+                const loadInitial = async () => {
+                    const [sRes, dRes, cAll] = await Promise.all([
+                        api.get('/api/admin/users?role=student'),
+                        api.get('/api/admin/departments'),
+                        api.get('/api/admin/classes')
+                    ]);
+                    students.value = sRes || [];
+                    departments.value = dRes || [];
+                    allClasses.value = cAll || [];
+                };
+
+                const onDeptChange = async () => {
+                    filters.value.semId = null; filters.value.classId = null;
+                    if (!filters.value.deptId) { sems.value = []; return; }
+                    
+                    const res = await api.get(`/api/admin/departments/${filters.value.deptId}/semesters`);
+                    // Sort by year desc and season (Fall > Spring)
+                    sems.value = (res || []).sort((a,b) => b.year - a.year || b.season.localeCompare(a.season));
+                    
+                    // AUTO-SELECT LATEST SESSION
+                    if (sems.value.length > 0) {
+                        filters.value.semId = sems.value[0].id;
+                        onSessionChange();
+                    }
+                };
+
+                const onSessionChange = async () => {
+                    filters.value.classId = null;
+                    if (!filters.value.semId) { classes.value = []; return; }
+                    classes.value = await api.get(`/api/admin/semesters/${filters.value.semId}/classes?department_id=${filters.value.deptId}`) || [];
+                };
+
+                const filteredStudents = computed(() => {
+                    let list = students.value;
+                    if (filters.value.classId) {
+                        const target = allClasses.value.find(c => c.id === filters.value.classId)?.name;
+                        list = list.filter(s => s.class_name === target);
+                    } else if (filters.value.semId) {
+                        // Broad filter: get all class names for this session
+                        const validClassNames = classes.value.map(c => c.name);
+                        list = list.filter(s => validClassNames.includes(s.class_name));
+                    }
+                    if (search.value) {
+                        const q = search.value.toLowerCase();
+                        list = list.filter(s => s.display_name.toLowerCase().includes(q) || s.registration_id.toLowerCase().includes(q));
+                    }
+                    return list;
+                });
+
+                const isAllSelected = computed(() => filteredStudents.value.length > 0 && selectedIds.value.length === filteredStudents.value.length);
+                const toggleAll = (e) => { selectedIds.value = e.target.checked ? filteredStudents.value.map(s => s.id) : []; };
+
+                const bulkMove = async () => {
+                    try {
+                        await api.post('/api/admin/students/bulk-move', { student_ids: selectedIds.value, new_class_id: destinationClassId.value });
+                        selectedIds.value = []; destinationClassId.value = null;
+                        await loadInitial();
+                        alert("Migration complete.");
+                    } catch (e) { alert("Error"); }
+                };
+
+                const openResetModal = (u) => { resetModal.value = { show: true, user: u, password: '' }; };
+                const submitReset = async () => {
+                    await api.post('/api/admin/users/reset-password', { user_id: resetModal.value.user.id, new_password: resetModal.value.password });
+                    resetModal.value.show = false; alert("Success.");
+                };
+
+                const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('role'); window.location.href = '/'; };
+
+                onMounted(loadInitial);
+                return { config, students, departments, sems, classes, allClasses, search, filters, selectedIds, destinationClassId, resetModal, isAllSelected, toggleAll, onDeptChange, onSessionChange, filteredStudents, bulkMove, openResetModal, submitReset, logout };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

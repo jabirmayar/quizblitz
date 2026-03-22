@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grade Submission | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        <navbar></navbar>
+
+        <main class="max-w-4xl mx-auto px-6 py-12">
+            <header class="mb-10 flex items-end justify-between gap-6">
+                <div>
+                    <h2 class="text-3xl font-bold text-white tracking-tight">Evaluate Submission</h2>
+                    <p class="text-zinc-500 mt-1">Award marks for essay and short-answer responses.</p>
+                </div>
+                <button @click="goBack"
+                        class="text-[10px] font-bold text-zinc-400 hover:text-white uppercase tracking-widest border border-zinc-800 px-4 py-2 rounded-lg transition">
+                    Back
+                </button>
+            </header>
+
+            <div v-if="answers.length === 0" class="py-20 text-center admin-card rounded-2xl border-dashed">
+                <p class="text-zinc-500 italic text-sm">No pending questions require manual grading for this session.</p>
+                <button onclick="history.back()" class="mt-6 text-[10px] font-bold text-white uppercase tracking-widest bg-zinc-800 px-6 py-2 rounded-lg">Return to Results</button>
+            </div>
+
+            <div class="space-y-8">
+                <div v-for="ans in answers" :key="ans.id" class="admin-card">
+                    <!-- Question Prompt -->
+                    <div class="mb-6">
+                        <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest block mb-2">Question</span>
+                        <p class="text-white font-medium text-lg leading-relaxed">{{ ans.question_body }}</p>
+                    </div>
+
+                    <!-- Student Work -->
+                    <div class="bg-black/30 p-6 rounded-xl border border-zinc-800 mb-8">
+                        <span class="text-[10px] text-blue-500 font-bold uppercase tracking-widest block mb-3">Student Response</span>
+                        <p class="text-zinc-300 text-sm whitespace-pre-wrap leading-loose">{{ ans.answer_value || '(No content provided)' }}</p>
+                    </div>
+
+                    <!-- Input Section -->
+                    <div class="flex items-center justify-between pt-6 border-t border-zinc-800">
+                        <div class="flex items-center gap-4">
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Marks Awarded</label>
+                            <div class="flex items-center bg-black border border-zinc-800 rounded-lg px-3">
+                                <input v-model.number="ans.marks_awarded" type="number" step="0.5" :max="ans.max_points" 
+                                       class="w-16 bg-transparent border-none text-white font-mono text-center focus:ring-0 py-2">
+                                <span class="text-zinc-600 font-mono text-xs">/ {{ ans.max_points }}</span>
+                            </div>
+                        </div>
+                        
+                        <button @click="submitMark(ans)" :disabled="ans.saving" 
+                                class="bg-white text-black px-8 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition shadow-lg">
+                            {{ ans.saving ? 'Saving...' : 'Save Grade' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const sessionId = ref(new URLSearchParams(window.location.search).get('session_id'));
+                const answers = ref([]);
+
+                const loadAnswers = async () => {
+                    try {
+                        const res = await api.get(`/api/teacher/sessions/${sessionId.value}/grade`);
+                        answers.value = (res || []).map(a => ({ ...a, saving: false }));
+                    } catch (e) { console.error('Grade fetch failed'); }
+                };
+
+                const submitMark = async (ans) => {
+                    if (ans.marks_awarded > ans.max_points) return alert(`Maximum marks allowed is ${ans.max_points}`);
+                    ans.saving = true;
+                    try {
+                        await api.post(`/api/teacher/answers/${ans.id}/grade`, { marks_awarded: ans.marks_awarded });
+                        await loadAnswers();
+                        if (answers.value.length === 0) {
+                            history.back();
+                            return;
+                        }
+                    } catch (e) { alert("Save failed."); }
+                    finally { ans.saving = false; }
+                };
+
+                onMounted(() => {
+                    if (!sessionId.value) history.back();
+                    loadAnswers();
+                });
+
+                const goBack = () => history.back();
+
+                return { config, answers, submitMark, goBack };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

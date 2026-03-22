@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    
+    <script>
+        (function() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const parseJwt = (jwtToken) => {
+                try {
+                    const parts = jwtToken.split('.');
+                    if (parts.length !== 3) return null;
+                    const base64Url = parts[1];
+                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+                    const json = atob(padded);
+                    return JSON.parse(json);
+                } catch (_) {
+                    return null;
+                }
+            };
+
+            const payload = parseJwt(token);
+            if (!payload) return;
+
+            const exp = payload.exp;
+            const expSeconds = (typeof exp === 'number') ? exp : (typeof exp === 'string' ? Number(exp) : null);
+            if (expSeconds && Date.now() >= expSeconds * 1000) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('role');
+                localStorage.removeItem('displayName');
+                return;
+            }
+
+            const role = payload.role;
+            if (role === 'admin') window.location.href = '/admin/dashboard';
+            else if (role === 'teacher') window.location.href = '/teacher/dashboard';
+            else if (role === 'student') window.location.href = '/dashboard';
+        })();
+    </script>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- External Assets -->
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6 bg-[#050505]">
+
+    <div id="app" v-cloak class="w-full max-w-[400px]">
+        <div class="glass-card p-10 rounded-2xl">
+            <!-- Dynamic Brand Header -->
+            <header class="mb-10">
+                <h1 class="brand-title text-xl uppercase tracking-tight">{{ config.APP_NAME }}</h1>
+                <div class="h-0.5 w-8 bg-white mt-2"></div>
+            </header>
+
+            <main>
+                <form @submit.prevent="handleLogin" class="space-y-6">
+                    <!-- Registration ID -->
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+                            Registration ID
+                        </label>
+                        <input 
+                            v-model="form.username" 
+                            type="text" 
+                            placeholder="AWKUM-123456789" 
+                            class="input-field text-sm placeholder:text-neutral-800" 
+                            required :disabled="loading"
+                        >
+                    </div>
+
+                    <!-- Password -->
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+                            Password
+                        </label>
+                        <div class="relative">
+                            <input 
+                                v-model="form.password" 
+                                :type="showPassword ? 'text' : 'password'" 
+                                placeholder="••••••••" 
+                                class="input-field text-sm placeholder:text-neutral-800 pr-12" 
+                                required :disabled="loading"
+                            >
+                            <button 
+                                type="button"
+                                @click="showPassword = !showPassword"
+                                class="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-white transition-colors"
+                            >
+                                <!-- Icon: Eye (When Password Hidden) -->
+                                <svg v-if="!showPassword" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                <!-- Icon: Eye-Off (When Password Shown) -->
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary w-full py-4 mt-2 text-[11px]" :disabled="loading">
+                        <span v-if="!loading">Sign In</span>
+                        <span v-else class="flex items-center justify-center">
+                            <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        </span>
+                    </button>
+                </form>
+
+                <div class="mt-8 text-center border-t border-zinc-800 pt-6">
+                    <p class="text-[11px] text-neutral-600 font-medium tracking-wide">
+                        New to {{ config.APP_NAME }}? <a href="/register" class="text-neutral-300 hover:text-white ml-1 font-bold">Create Account</a>
+                    </p>
+                </div>
+
+                <!-- Error Toast -->
+                <transition name="fade">
+                    <div v-if="notification.show" class="mt-6 p-4 rounded-xl error-toast flex items-center gap-3">
+                        <div class="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]"></div>
+                        <p class="text-[10px] text-red-400 font-bold uppercase tracking-tight leading-none">
+                            {{ notification.message }}
+                        </p>
+                    </div>
+                </transition>
+            </main>
+        </div>
+
+        <footer class="mt-8 text-center">
+            <p class="text-[10px] text-neutral-700 uppercase tracking-[0.4em]">
+                &copy; {{ currentYear }} {{ config.FOOTER_TEXT }}
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const form = ref({ username: '', password: '' });
+                const loading = ref(false);
+                const showPassword = ref(false);
+                const notification = ref({ show: false, message: '' });
+
+                const currentYear = computed(() => new Date().getFullYear());
+
+                const handleLogin = async () => {
+                    loading.value = true;
+                    notification.value.show = false;
+                    try {
+                        const res = await api.post('/api/auth/login', form.value);
+                        
+                        localStorage.setItem('token', res.access_token);
+                        localStorage.setItem('displayName', res.display_name);
+                        
+                        if (res.role === 'admin') window.location.href = '/admin/dashboard';
+                        else if (res.role === 'teacher') window.location.href = '/teacher/dashboard';
+                        else window.location.href = '/dashboard';
+
+                    } catch (e) {
+                        loading.value = false;
+                        notification.value.show = true;
+                        notification.value.message = e.detail || 'Access Denied';
+                    }
+                };
+
+                return { config, form, loading, showPassword, notification, handleLogin, currentYear };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

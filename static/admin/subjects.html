@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subjects | Admin</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        
+        <navbar></navbar>
+
+        <main class="max-w-6xl mx-auto px-6 py-10">
+            <header class="flex justify-between items-center mb-10">
+                <div>
+                    <h2 class="text-3xl font-bold text-white tracking-tight">Subject Management</h2>
+                    <p class="text-zinc-500 mt-1">Manage subjects and assign them to class groups.</p>
+                </div>
+                
+                <div class="flex gap-6 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800">
+                    <button @click="viewMode = 'master'" :class="{active: viewMode === 'master'}" class="tab-btn px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">Subject List</button>
+                    <button @click="viewMode = 'mapping'" :class="{active: viewMode === 'mapping'}" class="tab-btn px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">Assign to Class</button>
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Sidebar -->
+                <div class="lg:col-span-4 space-y-4">
+                    <label class="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-1">Select Department</label>
+                    <div class="space-y-1">
+                        <div v-for="d in departments" :key="d.id" @click="selectDept(d)"
+                             :class="['row-item p-4 rounded-xl cursor-pointer hover:bg-zinc-900/50', selectedDept?.id === d.id ? 'active' : 'bg-zinc-900/20']">
+                            <span class="text-white font-medium text-sm">{{ d.name }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div class="lg:col-span-8">
+                    <div v-if="!selectedDept" class="admin-card py-24 text-center border-dashed">
+                        <p class="text-zinc-600 italic text-sm">Select a department to continue.</p>
+                    </div>
+
+                    <!-- MODE 1: LIST -->
+                    <div v-else-if="viewMode === 'master'" class="space-y-6">
+                        <div class="admin-card">
+                            <form @submit.prevent="createSubject" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <input v-model="newSub.code" type="text" placeholder="Subject Code" class="input-field text-sm font-mono uppercase" required>
+                                <input v-model="newSub.name" type="text" placeholder="Subject Name" class="input-field text-sm" required>
+                                <button 
+                                    type="submit" 
+                                    class="bg-white text-black text-xs font-bold uppercase px-3 py-2 rounded-xl hover:bg-zinc-200">
+                                    Add Subject
+                                </button>                            
+                            </form>
+                        </div>
+
+                        <div class="admin-card !p-0 overflow-hidden">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-black/20 text-[10px] text-zinc-500 uppercase">
+                                    <tr>
+                                        <th class="px-6 py-4">Code</th>
+                                        <th class="px-6 py-4">Name</th>
+                                        <th class="px-6 py-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-zinc-800">
+                                    <tr v-for="s in subjects" :key="s.id" class="group">
+                                        <td class="px-6 py-4 font-mono text-xs text-blue-500 uppercase">{{ s.code }}</td>
+                                        <td class="px-6 py-4 text-white font-medium">{{ s.name }}</td>
+                                        <td class="px-6 py-4 text-right">
+                                            <button @click="deleteSubject(s.id)" class="action-btn del transition">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- MODE 2: ASSIGN -->
+                    <div v-else-if="viewMode === 'mapping'" class="space-y-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="flex flex-col gap-4">
+                                <label class="text-[10px] font-bold text-zinc-600 uppercase px-1">1. Select Class</label>
+                                <div class="space-y-1">
+                                    <div v-for="c in deptClasses" :key="c.id" @click="selectClass(c)"
+                                         :class="['mapping-card p-4 rounded-2xl cursor-pointer', selectedClass?.id === c.id ? 'border-blue-500 bg-blue-500/5' : '']">
+                                        <p class="text-sm text-white font-medium">{{ c.name }}</p>
+                                        <p class="text-[9px] text-zinc-500 font-mono uppercase">{{ c.code }}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-4">
+                                <label class="text-[10px] font-bold text-zinc-600 uppercase px-1">2. Select Subjects</label>
+                                <div class="bg-zinc-900/20 border border-zinc-800 rounded-3xl p-6">
+                                    <div v-if="!selectedClass" class="text-center py-10">
+                                        <p class="text-[10px] text-zinc-700 uppercase">Select a class first</p>
+                                    </div>
+                                    <div v-else class="space-y-3">
+                                        <label v-for="s in subjects" :key="s.id" class="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.02] cursor-pointer">
+                                            <div class="flex items-center gap-3">
+                                                <input type="checkbox" :value="s.id" v-model="selectedSubjectIds" class="w-4 h-4 rounded border-zinc-800 bg-black text-blue-600">
+                                                <span class="text-sm text-zinc-400">{{ s.name }}</span>
+                                            </div>
+                                        </label>
+                                        <button @click="saveCurriculum" class="w-full py-3 bg-blue-600 text-white text-[10px] font-bold uppercase rounded-xl mt-6">Save Assignments</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const viewMode = ref('master');
+                const departments = ref([]);
+                const subjects = ref([]);
+                const deptClasses = ref([]);
+                const selectedDept = ref(null);
+                const selectedClass = ref(null);
+                const selectedSubjectIds = ref([]);
+                const newSub = ref({ name: '', code: '' });
+
+                const loadDepts = async () => { departments.value = await api.get('/api/admin/departments') || []; };
+                
+                const selectDept = async (dept) => {
+                    selectedDept.value = dept;
+                    selectedClass.value = null;
+                    subjects.value = await api.get(`/api/admin/subjects?dept_id=${dept.id}`) || [];
+                    // Using the new path we added to admin.py
+                    deptClasses.value = await api.get(`/api/admin/departments/${dept.id}/classes`) || [];
+                };
+
+                const selectClass = async (cls) => {
+                    selectedClass.value = cls;
+                    selectedSubjectIds.value = await api.get(`/api/admin/classes/${cls.id}/subjects`) || [];
+                };
+
+                const saveCurriculum = async () => {
+                    try {
+                        await api.post(`/api/admin/classes/${selectedClass.value.id}/subjects`, selectedSubjectIds.value);
+                        alert("Saved.");
+                    } catch (e) { alert("Error"); }
+                };
+
+                const createSubject = async () => {
+                    await api.post('/api/admin/subjects', { ...newSub.value, department_id: selectedDept.value.id });
+                    newSub.value = { name: '', code: '' };
+                    selectDept(selectedDept.value);
+                };
+
+                const deleteSubject = async (id) => {
+                    if(!confirm("Delete?")) return;
+                    await api.delete(`/api/admin/subjects/${id}`);
+                    selectDept(selectedDept.value);
+                };
+
+                const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('role'); window.location.href = '/'; };
+
+                onMounted(loadDepts);
+                return { config, viewMode, departments, subjects, deptClasses, selectedDept, selectedClass, selectedSubjectIds, newSub, selectDept, selectClass, createSubject, deleteSubject, saveCurriculum, logout };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

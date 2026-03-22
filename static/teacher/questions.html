@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questions | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        <navbar></navbar>
+
+        <main class="max-w-7xl mx-auto px-6 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- 1. QUESTIONS LIST SIDEBAR -->
+                <section class="lg:col-span-4 space-y-4">
+                    <div class="flex justify-between items-end mb-2 px-1">
+                        <h3 class="text-white font-bold text-[10px] uppercase tracking-widest opacity-50">Questions ({{ questions.length }})</h3>
+                    </div>
+                    
+                    <div class="questions-sidebar overflow-y-auto pr-2 space-y-2">
+                        <div v-for="(q, index) in questions" :key="q.id" 
+                             :class="['q-item group p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 flex justify-between items-start cursor-pointer hover:bg-zinc-900/80', editingId === q.id ? 'editing' : '']"
+                             @click="editQuestion(q)">
+                            <div class="min-w-0 pr-4">
+                                <div class="flex items-center gap-2 mb-1.5">
+                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-black text-zinc-500 uppercase">{{ q.type }}</span>
+                                    <span class="text-[9px] font-bold text-zinc-600 uppercase">{{ q.points }} Marks</span>
+                                </div>
+                                <p class="text-sm text-zinc-300 line-clamp-2 leading-relaxed">{{ q.body }}</p>
+                            </div>
+                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button @click.stop="deleteQuestion(q.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+                            </div>
+                        </div>
+                        <div v-if="questions.length === 0" class="py-20 text-center border border-dashed border-zinc-800 rounded-2xl">
+                            <p class="text-[10px] text-zinc-600 uppercase tracking-widest">No questions added</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. EDITOR WORKSPACE -->
+                <section class="lg:col-span-8">
+                    <div class="admin-card sticky top-24">
+                        <header class="flex justify-between items-center mb-8">
+                            <h2 class="text-2xl font-bold text-white tracking-tight">{{ editingId ? 'Modify Question' : 'New Question' }}</h2>
+                            <button v-if="editingId" @click="resetForm" class="text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest transition">Discard Changes</button>
+                        </header>
+
+                        <form @submit.prevent="saveQuestion" class="space-y-6">
+                            <!-- Type & Marks -->
+                            <div class="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Question Type</label>
+                                    <select v-model="newQ.type" class="input-field text-sm cursor-pointer">
+                                        <option value="mcq">Multiple Choice (Auto-graded)</option>
+                                        <option value="qa">Essay / Q&A (Manual grade)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Weight (Marks)</label>
+                                    <input v-model.number="newQ.points" type="number" class="input-field text-sm font-mono" required>
+                                </div>
+                            </div>
+
+                            <!-- Question Text -->
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Question Content</label>
+                                <textarea v-model="newQ.body" rows="4" placeholder="Enter the question text here..." class="input-field text-sm leading-relaxed" required></textarea>
+                            </div>
+
+                            <!-- MCQ Options Builder -->
+                            <div v-if="newQ.type === 'mcq'" class="space-y-3 pt-4 border-t border-zinc-800">
+                                <label class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-4 block">Answer Key & Options</label>
+                                
+                                <div v-for="(opt, i) in newQ.options" :key="i" class="option-row flex items-center gap-3 p-2 rounded-xl">
+                                    <div class="flex items-center justify-center pl-2">
+                                        <input type="radio" :value="i" v-model="newQ.correct_index" name="correct_opt" 
+                                               class="w-4 h-4 rounded-full border-zinc-700 bg-black text-purple-500 focus:ring-0 cursor-pointer">
+                                    </div>
+                                    <input v-model="newQ.options[i]" type="text" :placeholder="'Option ' + (i+1)" 
+                                           class="flex-1 bg-transparent border-none text-white text-sm focus:ring-0 py-1">
+                                    <button @click.prevent="removeOption(i)" type="button" class="action-btn del p-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+
+                                <button @click.prevent="addOption" type="button" class="text-[10px] font-bold text-blue-500 hover:text-blue-400 uppercase tracking-widest py-2 transition">
+                                    + Add New Option
+                                </button>
+                            </div>
+
+                            <div class="pt-6">
+                                <button type="submit" class="btn-primary w-full py-4 shadow-lg shadow-white/5">
+                                    {{ editingId ? 'Update Question' : 'Add Question' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const quizId = ref(new URLSearchParams(window.location.search).get('quiz_id'));
+                const questions = ref([]);
+                const editingId = ref(null);
+                const newQ = ref({ type: 'mcq', body: '', points: 1, options: ['', '', '', ''], correct_index: null });
+
+                const loadQuestions = async () => {
+                    try {
+                        const res = await api.get(`/api/teacher/quizzes/${quizId.value}/questions`);
+                        questions.value = res || [];
+                    } catch (e) { console.error('Question sync fail'); }
+                };
+
+                const editQuestion = (q) => {
+                    editingId.value = q.id;
+                    newQ.value = {
+                        type: q.type,
+                        body: q.body,
+                        points: q.points,
+                        options: q.options || ['', '', '', ''],
+                        correct_index: q.options ? q.options.indexOf(q.correct_answer) : null
+                    };
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                };
+
+                const resetForm = () => {
+                    editingId.value = null;
+                    newQ.value = { type: 'mcq', body: '', points: 1, options: ['', '', '', ''], correct_index: null };
+                };
+
+                const saveQuestion = async () => {
+                    if (newQ.value.type === 'mcq' && newQ.value.correct_index === null) {
+                        alert("Select the correct answer option.");
+                        return;
+                    }
+
+                    const payload = {
+                        body: newQ.value.body,
+                        type: newQ.value.type,
+                        points: newQ.value.points,
+                        options: newQ.value.type === 'mcq' ? newQ.value.options.filter(o => o.trim() !== '') : null,
+                        correct_answer: newQ.value.type === 'mcq' ? newQ.value.options[newQ.value.correct_index] : null
+                    };
+
+                    try {
+                        if (editingId.value) {
+                            await api.put(`/api/teacher/questions/${editingId.value}`, payload);
+                        } else {
+                            await api.post(`/api/teacher/quizzes/${quizId.value}/questions`, payload);
+                        }
+                        resetForm();
+                        await loadQuestions();
+                    } catch (e) { alert("Save error: check field values."); }
+                };
+
+                const deleteQuestion = async (id) => {
+                    if (!confirm("Permanently delete this question?")) return;
+                    try {
+                        await api.delete(`/api/teacher/questions/${id}`);
+                        if (editingId.value === id) resetForm();
+                        await loadQuestions();
+                    } catch (e) { alert("Action restricted."); }
+                };
+
+                const addOption = () => newQ.value.options.push('');
+                const removeOption = (i) => {
+                    if (newQ.value.options.length <= 2) return;
+                    newQ.value.options.splice(i, 1);
+                    if (newQ.value.correct_index === i) newQ.value.correct_index = null;
+                };
+
+                onMounted(() => {
+                    if (!quizId.value) window.location.href = '/teacher/dashboard';
+                    loadQuestions();
+                });
+
+                return { config, questions, newQ, editingId, saveQuestion, editQuestion, deleteQuestion, resetForm, addOption, removeOption };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

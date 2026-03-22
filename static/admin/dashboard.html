@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased">
+
+    <div id="app" v-cloak>
+        
+        <navbar></navbar>
+
+        <main class="max-w-6xl mx-auto px-6 py-12">
+            
+            <!-- Dashboard Summary Header -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+                <div>
+                    <h2 class="text-3xl font-bold text-white tracking-tight">Overview</h2>
+                    <p class="text-zinc-500 mt-1">Global management of students, faculty, and school structure.</p>
+                </div>
+                
+                <!-- Simple Stat Row -->
+                <div class="flex gap-3">
+                    <div v-for="stat in stats" :key="stat.label" class="stat-item text-center">
+                        <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">{{ stat.label }}</p>
+                        <p class="text-xl font-bold text-white leading-none">{{ stat.value }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Management Grid -->
+            <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- School Structure -->
+                <a href="/admin/departments" class="admin-card group">
+                    <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">School Structure</h3>
+                    <p class="text-zinc-500 leading-relaxed">Organize departments, active semesters, and class registrations across the institution.</p>
+                </a>
+
+                <!-- Teacher Management -->
+                <a href="/admin/teachers" class="admin-card group">
+                    <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Faculty Management</h3>
+                    <p class="text-zinc-500 leading-relaxed">Create instructor accounts, manage credentials, and assign teachers to specific classes.</p>
+                </a>
+
+                <!-- Student Records -->
+                <a href="/admin/students" class="admin-card group">
+                    <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Student Directory</h3>
+                    <p class="text-zinc-500 leading-relaxed">Monitor student registrations, verify class enrollments, and handle bulk data migration.</p>
+                </a>
+
+                <!-- Reporting -->
+                <a href="/admin/results" class="admin-card group">
+                    <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Global Reporting</h3>
+                    <p class="text-zinc-500 leading-relaxed">View school-wide performance metrics, review integrity flags, and export exam results.</p>
+                </a>
+
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const stats = ref([
+                    { label: 'Students', value: '0' },
+                    { label: 'Classes', value: '0' },
+                    { label: 'Faculty', value: '0' },
+                ]);
+
+                const loadStats = async () => {
+                    try {
+                        const [students, classes, teachers] = await Promise.all([
+                            api.get('/api/admin/users?role=student'),
+                            api.get('/api/admin/classes'),
+                            api.get('/api/admin/users?role=teacher')
+                        ]);
+                        stats.value[0].value = students.length;
+                        stats.value[1].value = classes.length;
+                        stats.value[2].value = teachers.length;
+                    } catch (e) { console.error("Stats API error"); }
+                };
+
+                const logout = () => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                };
+
+                onMounted(loadStats);
+                return { config, stats, logout };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

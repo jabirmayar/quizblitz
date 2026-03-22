@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Quiz | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        <navbar></navbar>
+
+        <main class="max-w-3xl mx-auto py-12 px-6">
+            <header class="flex justify-between items-center mb-10">
+                <div>
+                    <h2 class="text-3xl font-bold text-white tracking-tight">Quiz Settings</h2>
+                    <p class="text-zinc-500 mt-1">Modify configuration for "{{ quiz.title }}"</p>
+                </div>
+                <a href="/teacher/dashboard" class="text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest transition-colors">Cancel</a>
+            </header>
+
+            <div v-if="loading" class="py-20 text-center admin-card rounded-2xl">
+                <div class="animate-pulse text-zinc-500 font-mono text-xs uppercase tracking-widest">Syncing with Server...</div>
+            </div>
+
+            <form v-else @submit.prevent="updateQuiz" class="admin-card space-y-8">
+                <!-- Status Toggle -->
+                <section class="p-4 rounded-xl bg-blue-600/5 border border-blue-600/20 flex justify-between items-center">
+                    <div>
+                        <p class="text-white font-bold text-xs uppercase tracking-widest">Visibility Status</p>
+                        <p class="text-[10px] text-zinc-500 mt-0.5">{{ quiz.is_published ? 'Quiz is live for students' : 'Quiz is hidden (Draft)' }}</p>
+                    </div>
+                    <input type="checkbox" v-model="quiz.is_published" class="w-5 h-5 rounded border-zinc-700 bg-zinc-950 text-blue-600 focus:ring-0">
+                </section>
+
+                <!-- Basic Details -->
+                <section class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Quiz Title</label>
+                        <input v-model="quiz.title" type="text" class="input-field mt-1.5" required>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Instructions</label>
+                        <textarea v-model="quiz.description" rows="3" class="input-field mt-1.5"></textarea>
+                    </div>
+                </section>
+
+                <div class="h-px bg-zinc-800"></div>
+
+                <!-- Scheduling Grid -->
+                <section class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Duration (Min)</label>
+                            <input v-model.number="quizDurationMinutes" type="number" class="input-field mt-1.5 font-mono" required>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Max Attempts</label>
+                            <input v-model.number="quiz.max_attempts" type="number" class="input-field mt-1.5 font-mono" required>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pass Percentage</label>
+                            <input v-model.number="quiz.pass_percentage" type="number" min="0" max="100" step="0.1" class="input-field mt-1.5 font-mono" required>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Available From</label>
+                            <input v-model="quiz.available_from" type="datetime-local" class="input-field mt-1.5 text-xs" required>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Available Until</label>
+                            <input v-model="quiz.available_until" type="datetime-local" class="input-field mt-1.5 text-xs" required>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="h-px bg-zinc-800"></div>
+
+                <!-- Toggle Options -->
+                <section class="space-y-3">
+                    <label class="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer group">
+                        <span class="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Shuffle question sequence</span>
+                        <input type="checkbox" v-model="quiz.shuffle_questions" class="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-blue-600 focus:ring-0">
+                    </label>
+                    <label class="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer group">
+                        <span class="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Enable anti-cheat monitoring</span>
+                        <input type="checkbox" v-model="quiz.anti_cheat_enabled" class="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-blue-600 focus:ring-0">
+                    </label>
+                    <label class="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer group">
+                        <span class="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Show correct answers after grading</span>
+                        <input type="checkbox" v-model="quiz.show_answers_after" class="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-blue-600 focus:ring-0">
+                    </label>
+                </section>
+
+                <div class="flex justify-end pt-4">
+                    <button type="submit" class="btn-primary w-full md:w-auto md:px-6 md:py-3" :disabled="isSaving">
+                        {{ isSaving ? 'Updating...' : 'Save Quiz Changes' }}
+                    </button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        // Formats a Local Date Object for the HTML input string
+        const formatForInput = (date) => {
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const quizId = ref(new URLSearchParams(window.location.search).get('quiz_id'));
+                const loading = ref(true);
+                const isSaving = ref(false);
+                const quizDurationMinutes = ref(60);
+                const quiz = ref({});
+
+                const loadQuiz = async () => {
+                    try {
+                        const res = await api.get(`/api/teacher/quizzes/${quizId.value}`);
+                        
+                        // FIX: Forces the browser to treat DB strings as UTC by adding "Z"
+                        // Then formatForInput converts that UTC time to your local Pakistan time
+                        quiz.value = { 
+                            ...res, 
+                            available_from: formatForInput(new Date(res.available_from + "Z")), 
+                            available_until: formatForInput(new Date(res.available_until + "Z")),
+                            shuffle_questions: Boolean(res.shuffle_questions),
+                            anti_cheat_enabled: Boolean(res.anti_cheat_enabled),
+                            show_answers_after: Boolean(res.show_answers_after),
+                            is_published: Boolean(res.is_published)
+                        };
+                        quizDurationMinutes.value = Math.floor(res.duration_seconds / 60);
+                    } catch (e) { 
+                        alert('Failed to load quiz data'); 
+                        window.location.href = '/teacher/dashboard';
+                    } finally { 
+                        loading.value = false; 
+                    }
+                };
+
+                const updateQuiz = async () => {
+                    isSaving.value = true;
+                    try {
+                        const payload = {
+                            title: quiz.value.title,
+                            subject_id: parseInt(quiz.value.subject_id),
+                            description: quiz.value.description,
+                            duration_seconds: parseInt(quizDurationMinutes.value) * 60,
+                            max_attempts: parseInt(quiz.value.max_attempts),
+                            pass_percentage: parseFloat(quiz.value.pass_percentage),
+                            shuffle_questions: quiz.value.shuffle_questions,
+                            anti_cheat_enabled: quiz.value.anti_cheat_enabled,
+                            show_answers_after: quiz.value.show_answers_after,
+                            is_published: quiz.value.is_published,
+                            // new Date() uses local time, .toISOString() converts it to UTC for the server
+                            available_from: new Date(quiz.value.available_from).toISOString(),
+                            available_until: new Date(quiz.value.available_until).toISOString()
+                        };
+
+                        await api.put(`/api/teacher/quizzes/${quizId.value}`, payload);
+                        alert("Quiz updated successfully.");
+                        window.location.href = '/teacher/dashboard';
+                    } catch (e) { 
+                        alert('Update failed: ' + JSON.stringify(e.detail)); 
+                        isSaving.value = false; 
+                    }
+                };
+
+                onMounted(loadQuiz);
+                return { config, quiz, quizDurationMinutes, loading, isSaving, updateQuiz };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

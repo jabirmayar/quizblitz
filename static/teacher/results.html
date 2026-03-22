@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Results | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        <navbar></navbar>
+
+        <main class="max-w-7xl mx-auto px-6 py-10">
+            <header class="flex justify-between items-end mb-10">
+                <div>
+                    <h2 class="text-3xl font-bold text-white tracking-tight">{{ quizTitle }}</h2>
+                    <p class="text-zinc-500 mt-1">Review student submissions and performance metrics.</p>
+                </div>
+                <button @click="openExportModal" :disabled="sessions.length === 0"
+                        class="text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest border border-zinc-800 px-4 py-2 rounded-lg transition disabled:opacity-30">
+                    Export
+                </button>
+            </header>
+
+            <div class="admin-card !p-0 overflow-hidden shadow-2xl">
+                <table class="w-full results-table text-sm">
+                    <thead class="bg-black/20 text-left">
+                        <tr>
+                            <th>Student</th>
+                            <th>Status</th>
+                            <th>Score</th>
+                            <th>Result</th>
+                            <th class="text-center">Integrity Flags</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="s in sessions" :key="s.id" class="hover:bg-white/[0.01] transition-colors">
+                            <td>
+                                <p class="text-white font-medium">{{ s.student_name }}</p>
+                                <p class="text-[10px] text-zinc-500 font-mono uppercase tracking-tighter">{{ s.registration_id }}</p>
+                            </td>
+                            <td>
+                                <span v-if="s.status === 'done'" class="text-zinc-400 font-medium">Submitted</span>
+                                <span v-else class="text-amber-500 italic opacity-80">In Progress</span>
+                            </td>
+                            <td class="font-mono">
+                                <span v-if="s.result_released" class="text-white font-bold text-base">{{ s.score }}</span>
+                                <span v-else class="text-zinc-600 italic">Pending Grade</span>
+                                <p v-if="s.result_released" class="text-[10px] text-zinc-600 mt-1">
+                                    {{ s.total_points ? `${s.percentage_score}%` : '0%' }} &middot; Pass {{ s.pass_percentage }}%
+                                </p>
+                                <p v-if="s.result_released && s.is_score_overridden" class="text-[10px] text-red-400 mt-1 uppercase tracking-widest font-bold">
+                                    Overridden &middot; Original Score: {{ s.raw_score ?? 0 }}
+                                </p>
+                                <p v-if="s.result_released && s.is_score_overridden && s.score_override_reason" class="text-[11px] text-zinc-400 mt-2 whitespace-pre-wrap">
+                                    {{ s.score_override_reason }}
+                                </p>
+                            </td>
+                            <td>
+                                <span v-if="s.result_released" class="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
+                                      :class="s.is_passed ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'">
+                                    {{ s.is_passed ? 'Passed' : 'Failed' }}
+                                </span>
+                                <span v-else class="text-zinc-700 font-mono text-[10px]">&mdash;</span>
+                            </td>
+                            <td class="text-center">
+                                <button v-if="s.cheat_flag_count > 0" 
+                                        @click="showCheatEvents(s)"
+                                        class="flag-pill px-3 py-1 rounded-full uppercase tracking-widest cursor-pointer hover:bg-red-900/30 transition">
+                                    ⚠ {{ s.cheat_flag_count }} Flags
+                                </button>
+                                <span v-else class="text-zinc-700 font-mono text-[10px]">VERIFIED</span>
+                            </td>
+                            <td class="text-right">
+                                <a v-if="!s.result_released && s.status === 'done'" 
+                                  :href="'/teacher/grade?session_id=' + s.id" 
+                                  class="text-[10px] font-bold text-white bg-zinc-800 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-zinc-700 transition">
+                                    Grade Answers
+                                </a>
+                                <button v-else-if="s.result_released && s.status === 'done' && !s.is_score_overridden"
+                                        @click="overrideZero(s)"
+                                        class="text-[10px] font-bold text-white bg-rose-600/80 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-rose-600 transition ml-2">
+                                    Set 0 Marks
+                                </button>
+                                <button v-else-if="s.result_released && s.status === 'done' && s.is_score_overridden"
+                                        @click="clearOverride(s)"
+                                        class="text-[10px] font-bold text-white bg-zinc-800 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-zinc-700 transition ml-2">
+                                    Undo 0 Marks
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="sessions.length === 0">
+                            <td colspan="6" class="py-20 text-center text-zinc-600 italic">No submissions recorded for this quiz.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <!-- Cheat Events Modal -->
+        <div v-if="showModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click="closeModal">
+            <div class="admin-card max-w-2xl w-full max-h-[80vh] overflow-hidden" @click.stop>
+                <div class="flex justify-between items-center p-6 border-b border-zinc-800">
+                    <h3 class="text-xl font-bold text-white">Integrity Violations</h3>
+                    <button @click="closeModal" class="text-zinc-500 hover:text-white transition">✕</button>
+                </div>
+                <div class="p-6 overflow-y-auto max-h-[60vh]">
+                    <div class="mb-4">
+                        <p class="text-zinc-300"><strong>Student:</strong> {{ selectedSession?.student_name }}</p>
+                        <p class="text-zinc-500 text-sm"><strong>ID:</strong> {{ selectedSession?.registration_id }}</p>
+                    </div>
+                    <div v-if="selectedSession?.cheat_events?.length > 0" class="space-y-3">
+                        <div v-for="event in selectedSession.cheat_events" :key="event.id" class="bg-zinc-900/50 rounded-lg p-4 border border-zinc-800">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="text-red-400 font-medium">{{ formatEventType(event.event_type) }}</span>
+                                        <span class="text-zinc-600 text-xs">•</span>
+                                        <span class="text-zinc-500 text-xs">{{ formatTimestamp(event.occurred_at) }}</span>
+                                    </div>
+                                    <p v-if="formatEventDetail(event)" class="text-zinc-400 text-sm">{{ formatEventDetail(event) }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-8 text-zinc-600">
+                        No integrity violations recorded for this session.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Score Override Modal -->
+        <div v-if="overrideModalOpen" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click="closeOverrideModal">
+            <div class="admin-card max-w-lg w-full overflow-hidden" @click.stop>
+                <div class="flex justify-between items-center p-6 border-b border-zinc-800">
+                    <h3 class="text-xl font-bold text-white">{{ overrideMode === 'set' ? 'Set 0 Marks' : 'Undo 0 Marks' }}</h3>
+                    <button @click="closeOverrideModal" class="text-zinc-500 hover:text-white transition">&times;</button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="text-sm text-zinc-400">
+                        <p><span class="text-zinc-300 font-medium">Student:</span> {{ overrideTarget?.student_name }}</p>
+                        <p><span class="text-zinc-300 font-medium">ID:</span> {{ overrideTarget?.registration_id }}</p>
+                    </div>
+
+                    <div v-if="overrideMode === 'set'">
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Reason (Optional)</label>
+                        <textarea v-model="overrideReason" rows="3" class="input-field"></textarea>
+                        <p class="text-[10px] text-zinc-600 mt-2">This note will be visible in the student result page.</p>
+                    </div>
+                    <div v-else class="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">
+                        This will restore normal scoring.
+                    </div>
+
+                    <div class="flex gap-3 justify-end pt-2">
+                        <button class="btn-ghost px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest" @click="closeOverrideModal">Cancel</button>
+                        <button v-if="overrideMode === 'set'"
+                                class="text-[10px] font-bold text-white bg-rose-600/80 px-4 py-2 rounded-lg uppercase tracking-widest hover:bg-rose-600 transition"
+                                :disabled="overrideSubmitting"
+                                @click="submitOverride">
+                            {{ overrideSubmitting ? 'Saving...' : 'Confirm 0 Marks' }}
+                        </button>
+                        <button v-else
+                                class="text-[10px] font-bold text-white bg-zinc-800 px-4 py-2 rounded-lg uppercase tracking-widest hover:bg-zinc-700 transition"
+                                :disabled="overrideSubmitting"
+                                @click="submitOverride">
+                            {{ overrideSubmitting ? 'Saving...' : 'Confirm Undo' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Modal -->
+        <div v-if="exportModalOpen" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click="closeExportModal">
+            <div class="admin-card max-w-lg w-full overflow-hidden" @click.stop>
+                <div class="flex justify-between items-center p-6 border-b border-zinc-800">
+                    <h3 class="text-xl font-bold text-white">Export Results</h3>
+                    <button @click="closeExportModal" class="text-zinc-500 hover:text-white transition">&times;</button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <p class="text-sm text-zinc-400">Choose a format for download.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button @click="exportData('csv')" class="btn-primary px-4 py-3 rounded-xl text-[10px] uppercase tracking-widest">CSV</button>
+                        <button @click="exportData('tsv')" class="btn-ghost px-4 py-3 rounded-xl text-[10px] uppercase tracking-widest">Excel (TSV)</button>
+                        <button @click="exportData('json')" class="btn-ghost px-4 py-3 rounded-xl text-[10px] uppercase tracking-widest">JSON</button>
+                    </div>
+                    <div class="flex justify-end pt-2">
+                        <button class="btn-ghost px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest" @click="closeExportModal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const quizId = ref(new URLSearchParams(window.location.search).get('quiz_id'));
+                const quizTitle = ref('Loading...');
+                const sessions = ref([]);
+                const showModal = ref(false);
+                const selectedSession = ref(null);
+                const overrideModalOpen = ref(false);
+                const overrideMode = ref('set'); // 'set' | 'clear'
+                const overrideTarget = ref(null);
+                const overrideReason = ref('');
+                const overrideSubmitting = ref(false);
+                const exportModalOpen = ref(false);
+
+                const loadResults = async () => {
+                    try {
+                        const res = await api.get(`/api/teacher/quizzes/${quizId.value}/results`);
+                        quizTitle.value = res.quiz.title;
+                        sessions.value = res.sessions || [];
+                    } catch (e) { console.error('Data sync failed'); }
+                };
+
+                const showCheatEvents = (session) => {
+                    selectedSession.value = session;
+                    showModal.value = true;
+                };
+
+                const closeModal = () => {
+                    showModal.value = false;
+                    selectedSession.value = null;
+                };
+
+                const formatEventType = (eventType) => {
+                    const eventLabels = {
+                        // New (layman-friendly) event types
+                        'left_quiz_window': 'Left the quiz window',
+                        'left_quiz_tab': 'Left the quiz tab',
+                        'attempt_open_devtools': 'Tried to open browser developer tools',
+                        'attempt_view_source': 'Tried to view page source',
+                        'attempt_right_click': 'Tried to right-click',
+                        'attempt_copy': 'Tried to copy text',
+                        'attempt_paste': 'Tried to paste text',
+                        'attempt_cut': 'Tried to cut text',
+                        'text_selected': 'Selected text (possible copy)',
+                        'attempt_print_screen': 'Tried to take a screenshot (Print Screen)',
+
+                        // Backwards compatible (old event types)
+                        'window_blur': 'Left the quiz window',
+                        'tab_hidden': 'Left the quiz tab',
+                        'right_click': 'Tried to right-click',
+                        'dev_tools_attempt': 'Tried to open browser developer tools',
+                        'copy_attempt': 'Tried to copy text',
+                        'paste_attempt': 'Tried to paste text',
+                        'cut_attempt': 'Tried to cut text',
+                        'text_selection': 'Selected text (possible copy)',
+                        'print_screen_attempt': 'Tried to take a screenshot (Print Screen)',
+                        'suspicious_focus_change': 'Left the quiz window (focus changed)'
+                    };
+                    return eventLabels[eventType] || eventType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                };
+
+                const formatEventDetail = (event) => {
+                    if (!event) return '';
+                    const raw = event.detail || '';
+                    if (!raw) {
+                        if (event.event_type === 'suspicious_focus_change') {
+                            return 'The quiz window lost focus for more than 1 second.';
+                        }
+                        if (event.event_type === 'window_blur') {
+                            return 'Student left the quiz window. (Older log: away time was not recorded.)';
+                        }
+                        if (event.event_type === 'tab_hidden') {
+                            return 'Student left the quiz tab. (Older log: away time was not recorded.)';
+                        }
+                        return '';
+                    }
+
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object') {
+                            if (typeof parsed.away_seconds === 'number') {
+                                const base = `Away for ${parsed.away_seconds} seconds.`;
+                                if (event.event_type === 'left_quiz_window' || event.event_type === 'window_blur' || event.event_type === 'suspicious_focus_change') {
+                                    return `${base} (Switched away from the quiz window)`;
+                                }
+                                if (event.event_type === 'left_quiz_tab' || event.event_type === 'tab_hidden') {
+                                    return `${base} (Quiz tab was not visible)`;
+                                }
+                                return base;
+                            }
+                            if (typeof parsed.shortcut === 'string' && parsed.shortcut) {
+                                return `Shortcut used: ${parsed.shortcut}`;
+                            }
+                        }
+                    } catch (_) {
+                        // ignore JSON parse errors and fall back to raw string
+                    }
+
+                    return raw;
+                };
+
+                const formatTimestamp = (timestamp) => {
+                    if (!timestamp) return '';
+                    const date = new Date(timestamp);
+                    return date.toLocaleString();
+                };
+
+                const openExportModal = () => { exportModalOpen.value = true; };
+                const closeExportModal = () => { exportModalOpen.value = false; };
+
+                const downloadTextFile = (filename, mimeType, content, withBom = false) => {
+                    const data = withBom ? `\ufeff${content}` : content;
+                    const blob = new Blob([data], { type: mimeType });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                };
+
+                const escapeCsvValue = (value, delimiter = ',') => {
+                    if (value === null || value === undefined) return '';
+                    const str = String(value);
+                    const needsQuotes = str.includes('"') || str.includes('\n') || str.includes('\r') || str.includes(delimiter);
+                    const safe = str.replaceAll('"', '""').replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+                    return needsQuotes ? `"${safe}"` : safe;
+                };
+
+                const buildExportRows = () => {
+                    return (sessions.value || []).map(s => {
+                        const cheatEvents = (s.cheat_events || []).map(e => {
+                            const label = formatEventType(e.event_type);
+                            const detail = formatEventDetail(e);
+                            const ts = formatTimestamp(e.occurred_at);
+                            return `${label}${detail ? ` - ${detail}` : ''}${ts ? ` @ ${ts}` : ''}`;
+                        }).join('; ');
+
+                        return {
+                            student_name: s.student_name,
+                            registration_id: s.registration_id,
+                            class_name: s.class_name,
+                            status: s.status,
+                            score: s.score,
+                            total_points: s.total_points,
+                            percentage_score: s.percentage_score,
+                            pass_percentage: s.pass_percentage,
+                            result: s.is_passed ? 'Passed' : 'Failed',
+                            is_score_overridden: s.is_score_overridden ? 1 : 0,
+                            score_override_reason: s.score_override_reason || '',
+                            cheat_flag_count: s.cheat_flag_count,
+                            cheat_events: cheatEvents
+                        };
+                    });
+                };
+
+                const exportData = (format) => {
+                    const rows = buildExportRows();
+                    if (!rows.length) return;
+
+                    const baseName = `results_${quizId.value || 'quiz'}`;
+
+                    if (format === 'json') {
+                        downloadTextFile(`${baseName}.json`, 'application/json', JSON.stringify(rows, null, 2), true);
+                        closeExportModal();
+                        return;
+                    }
+
+                    const headers = [
+                        { key: 'student_name', label: 'Student' },
+                        { key: 'registration_id', label: 'ID' },
+                        { key: 'class_name', label: 'Class' },
+                        { key: 'status', label: 'Status' },
+                        { key: 'score', label: 'Score' },
+                        { key: 'total_points', label: 'Total' },
+                        { key: 'percentage_score', label: 'Percent' },
+                        { key: 'pass_percentage', label: 'Pass_Percent' },
+                        { key: 'result', label: 'Result' },
+                        { key: 'is_score_overridden', label: 'Overridden' },
+                        { key: 'score_override_reason', label: 'Override_Reason' },
+                        { key: 'cheat_flag_count', label: 'Flags' },
+                        { key: 'cheat_events', label: 'Integrity_Events' },
+                    ];
+
+                    const delimiter = format === 'tsv' ? '\t' : ',';
+                    const lines = [];
+                    lines.push(headers.map(h => escapeCsvValue(h.label, delimiter)).join(delimiter));
+                    for (const row of rows) {
+                        lines.push(headers.map(h => escapeCsvValue(row[h.key], delimiter)).join(delimiter));
+                    }
+
+                    const content = lines.join('\r\n');
+                    const ext = format === 'tsv' ? 'tsv' : 'csv';
+                    const mime = format === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
+                    downloadTextFile(`${baseName}.${ext}`, mime, content, true);
+                    closeExportModal();
+                };
+
+                const openOverrideModal = (mode, session) => {
+                    overrideMode.value = mode;
+                    overrideTarget.value = session;
+                    overrideReason.value = '';
+                    overrideModalOpen.value = true;
+                };
+
+                const closeOverrideModal = () => {
+                    overrideModalOpen.value = false;
+                    overrideTarget.value = null;
+                    overrideReason.value = '';
+                    overrideSubmitting.value = false;
+                };
+
+                const submitOverride = async () => {
+                    if (!overrideTarget.value) return;
+                    overrideSubmitting.value = true;
+                    try {
+                        if (overrideMode.value === 'set') {
+                            const reason = overrideReason.value?.trim() ? overrideReason.value.trim() : null;
+                            await api.post(`/api/teacher/sessions/${overrideTarget.value.id}/override-zero`, { reason });
+                        } else {
+                            await api.delete(`/api/teacher/sessions/${overrideTarget.value.id}/override-zero`);
+                        }
+                        await loadResults();
+                        closeOverrideModal();
+                    } catch (e) {
+                        overrideSubmitting.value = false;
+                        alert('Action failed: ' + JSON.stringify(e.detail || e));
+                    }
+                };
+
+                const overrideZero = (session) => openOverrideModal('set', session);
+
+                const clearOverride = (session) => openOverrideModal('clear', session);
+
+                onMounted(loadResults);
+                return {
+                    config, quizTitle, sessions,
+                    showModal, selectedSession, showCheatEvents, closeModal,
+                    overrideModalOpen, overrideMode, overrideTarget, overrideReason, overrideSubmitting,
+                    openOverrideModal, closeOverrideModal, submitOverride,
+                    exportModalOpen, openExportModal, closeExportModal, exportData,
+                    formatEventType, formatEventDetail, formatTimestamp,
+                    overrideZero, clearOverride
+                };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

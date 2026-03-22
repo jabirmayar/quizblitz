@@ -1,0 +1,7 @@
+RewriteEngine On
+# If the requested name isn't a directory
+RewriteCond %{REQUEST_FILENAME} !-d
+# And if the requested name + .html IS a file
+RewriteCond %{REQUEST_FILENAME}.html -f
+# Then internally redirect to the .html version
+RewriteRule ^(.*)$ $1.html [L]

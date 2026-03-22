@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Answers | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        <navbar></navbar>
+
+        <main class="max-w-3xl mx-auto py-12 px-6">
+            <header class="mb-12">
+                <h2 class="text-3xl font-bold text-white tracking-tight">Review: {{ title }}</h2>
+                <p class="text-zinc-500 mt-1">Detailed breakdown of your performance and correct keys.</p>
+            </header>
+
+            <div v-if="loading" class="py-20 text-center">
+                <div class="animate-pulse text-zinc-500 font-mono text-xs uppercase tracking-widest">Retrieving Submission Data...</div>
+            </div>
+
+            <div v-else class="space-y-8">
+                <div v-for="(item, idx) in review" :key="idx" 
+                     :class="['review-card p-8 rounded-3xl', item.type === 'mcq' ? (item.is_correct ? 'correct' : 'incorrect') : '']">
+                    
+                    <div class="flex justify-between items-start gap-6 mb-8">
+                        <div class="flex gap-4">
+                            <span class="text-zinc-600 font-mono text-sm font-bold pt-1">{{ (idx + 1).toString().padStart(2, '0') }}</span>
+                            <h3 class="text-lg font-medium text-white leading-relaxed">{{ item.body }}</h3>
+                        </div>
+                        <div class="marks-badge px-3 py-1 rounded-lg shrink-0">
+                            <span :class="item.marks_awarded > 0 ? 'text-emerald-400' : 'text-rose-500'" class="font-bold text-sm">
+                                {{ item.marks_awarded }}
+                            </span>
+                            <span class="text-zinc-600 text-[10px] ml-1">/ {{ item.points }}</span>
+                        </div>
+                    </div>
+
+                    <!-- MCQ Options Review -->
+                    <div v-if="item.type === 'mcq'" class="space-y-3 ml-10">
+                        <div v-for="opt in item.options" :key="opt" 
+                             :class="['option-pill p-4 rounded-2xl text-sm flex justify-between items-center', 
+                                     opt === item.correct_answer ? 'is-correct' : '', 
+                                     (opt === item.student_answer && !item.is_correct) ? 'is-wrong' : '']">
+                            <span>{{ opt }}</span>
+                            
+                            <div class="flex gap-2">
+                                <span v-if="opt === item.correct_answer" class="text-[9px] font-black uppercase tracking-tighter bg-emerald-500/20 px-2 py-0.5 rounded">Correct Key</span>
+                                <span v-if="opt === item.student_answer" class="text-[9px] font-black uppercase tracking-tighter bg-zinc-800 text-white px-2 py-0.5 rounded">Your Selection</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Q&A Section Review -->
+                    <div v-else class="space-y-6 ml-10">
+                        <div class="bg-black/40 border border-zinc-800 p-6 rounded-2xl">
+                            <span class="text-[9px] font-bold text-blue-500 uppercase tracking-widest block mb-3">Your Response</span>
+                            <p class="text-sm text-zinc-300 leading-loose italic">{{ item.student_answer || 'No response recorded.' }}</p>
+                        </div>
+                        <div v-if="item.marks_awarded == 0" class="flex items-center gap-2 text-rose-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <span class="text-[10px] font-bold uppercase tracking-widest">Incorrect or Insufficient Answer</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const sessionId = ref(new URLSearchParams(window.location.search).get('session_id'));
+                const title = ref('');
+                const review = ref([]);
+                const loading = ref(true);
+
+                const loadReview = async () => {
+                    if (!sessionId.value) { window.location.href = "/dashboard"; return; }
+                    try {
+                        const res = await api.get(`/api/student/sessions/${sessionId.value}/review`);
+                        title.value = res.quiz_title;
+                        review.value = res.review;
+                    } catch (e) {
+                        alert(e.detail || "Review data unavailable at this time.");
+                        window.location.href = "/dashboard";
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                onMounted(loadReview);
+
+                return { config, title, review, loading, history: window.history };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

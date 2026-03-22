@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+
+    <div id="app" v-cloak>
+        
+        <navbar></navbar>
+
+        <main class="max-w-7xl mx-auto px-6 py-12">
+            
+            <header class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+                <div>
+                    <h2 class="text-3xl font-bold text-white tracking-tight">My Quizzes</h2>
+                    <p class="text-zinc-500 mt-1">Manage active sessions and review academic history.</p>
+                </div>
+                
+                <div class="flex gap-6 border-b border-zinc-800 pb-1">
+                    <button @click="activeTab = 'active'" :class="{active: activeTab === 'active'}" class="tab-btn px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors">Current & Upcoming</button>
+                    <button @click="activeTab = 'history'" :class="{active: activeTab === 'history'}" class="tab-btn px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors">History</button>
+                </div>
+            </header>
+
+            <div v-if="loading" class="py-20 text-center animate-pulse text-zinc-600 font-mono text-xs uppercase tracking-widest">
+                Syncing portal data...
+            </div>
+
+            <div v-else>
+                <div v-if="displayQuizzes.length === 0" class="py-24 border border-dashed border-zinc-800 rounded-3xl text-center">
+                    <p class="text-zinc-600 text-sm italic">No quizzes found in this category.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="q in displayQuizzes" :key="q.id" class="admin-card group flex flex-col h-full">
+
+                        <!-- Subject Info -->
+                        <div class="flex items-center gap-2 mb-2 px-0.5">
+                            <span class="text-[9px] font-mono text-blue-500 font-bold uppercase tracking-tighter">{{ q.subject_code }}</span>
+                            <span class="h-2 w-px bg-zinc-800"></span>
+                            <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate">{{ q.subject_name }}</span>
+                        </div>
+                        
+                        <!-- Header: Title + Dynamic State -->
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-lg font-bold text-white pr-4 leading-tight group-hover:text-blue-400 transition-colors">{{ q.title }}</h3>
+                            <span :class="['state-pill', getQuizState(q)]">{{ getQuizState(q).replace('_', ' ') }}</span>
+                        </div>
+
+                        <p class="text-sm text-zinc-500 line-clamp-2 mb-8 flex-grow">{{ q.description || 'No specific instructions provided.' }}</p>
+
+                        <!-- Time and Score Meta -->
+                        <div class="grid grid-cols-2 gap-2 mb-8">
+                            <div class="card-inner-stat p-3 rounded-xl">
+                                <p class="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter mb-1">Time Window</p>
+                                <p class="text-xs text-zinc-300 font-mono">{{ Math.floor(q.duration_seconds / 60) }}m</p>
+                            </div>
+                            <div class="card-inner-stat p-3 rounded-xl text-right">
+                                <p class="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter mb-1">Marks</p>
+                                <p class="text-xs font-mono" :class="q.result_released ? 'text-green-400' : 'text-zinc-500'">
+                                    {{ q.result_released ? q.score + '/' + q.total_points : '--' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Action Logic with Real-time Countdowns -->
+                        <div class="mt-auto">
+                            
+                            <!-- State: LIVE (Ready to Start) -->
+                            <div v-if="getQuizState(q) === 'live'">
+                                <div class="flex justify-between items-center mb-3 px-1">
+                                    <span class="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Entry Open</span>
+                                    <span class="text-[10px] font-bold text-emerald-500 countdown-text italic">Closes: {{ getCountdown(q.available_until) }}</span>
+                                </div>
+                                <button @click="startQuiz(q.id)" class="btn-primary w-full py-4 text-[11px] shadow-lg shadow-white/5">Begin Quiz</button>
+                            </div>
+                            
+                            <!-- State: IN PROGRESS (Resumable) -->
+                            <div v-else-if="getQuizState(q) === 'in_progress'">
+                                <div class="flex justify-between items-center mb-3 px-1">
+                                    <span class="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Session Active</span>
+                                    <span class="text-[10px] font-bold text-amber-500 countdown-text italic">Time: {{ getCountdown(q.available_until) }}</span>
+                                </div>
+                                <a :href="'/quiz?session_id=' + q.session_id" class="block text-center w-full bg-amber-500 text-black font-bold py-4 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-amber-400 transition">Resume Session</a>
+                            </div>
+
+                            <!-- State: UPCOMING (Countdown to start) -->
+                            <div v-else-if="getQuizState(q) === 'upcoming'" class="w-full py-5 rounded-2xl border border-zinc-800 bg-zinc-900/10 text-center">
+                                <p class="text-[9px] text-zinc-600 font-bold uppercase tracking-[0.2em] mb-1">Starts In</p>
+                                <p class="text-sm text-blue-400 font-bold countdown-text">{{ getCountdown(q.available_from) }}</p>
+                                <p class="text-[12px] text-zinc-700 mt-1 uppercase font-mono">{{ formatDate(q.available_from) }}</p>
+                            </div>
+
+                            <!-- State: COMPLETED / EXPIRED -->
+                            <a v-else :href="'/result?session_id=' + q.session_id" 
+                               class="block text-center w-full bg-zinc-900 text-white font-bold py-4 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-zinc-800 transition">
+                                {{ getQuizState(q) === 'completed' ? 'View Results' : 'Results Unavailable' }}
+                            </a>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, onBeforeUnmount } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const activeTab = ref('active');
+                const quizzes = ref([]);
+                const loading = ref(true);
+                const currentTime = ref(new Date());
+                let ticker = null;
+
+                const loadQuizzes = async () => {
+                    try {
+                        const res = await api.get('/api/student/quizzes');
+                        quizzes.value = res || [];
+                    } catch (e) { console.error('Sync Fail'); }
+                    finally { loading.value = false; }
+                };
+
+                const getQuizState = (quiz) => {
+                    // Prefer server-computed UI state when available
+                    if (quiz.ui_state && ['upcoming', 'live', 'in_progress', 'completed', 'expired'].includes(quiz.ui_state)) {
+                        return quiz.ui_state;
+                    }
+
+                    const now = currentTime.value.getTime();
+                    const start = new Date(quiz.available_from + "Z").getTime();
+                    const end = new Date(quiz.available_until + "Z").getTime();
+
+                    // 1. Check if user already finished
+                    if (quiz.session_status === 'done') return 'completed';
+                    
+                    // 2. Check if user has an active session
+                    if (quiz.session_status === 'in_progress' && now <= end) return 'in_progress';
+
+                    // 3. Time-based states
+                    if (now < start) return 'upcoming';
+                    if (now > end) return 'expired';
+                    
+                    return 'live';
+                };
+
+                const displayQuizzes = computed(() => {
+                    if (activeTab.value === 'active') {
+                        return quizzes.value.filter(q => ['live', 'in_progress', 'upcoming'].includes(getQuizState(q)));
+                    }
+                    return quizzes.value.filter(q => ['completed', 'expired'].includes(getQuizState(q)));
+                });
+
+                const getCountdown = (dateStr) => {
+                    if (!dateStr) return "00:00:00";
+                    const target = new Date(dateStr + "Z").getTime();
+                    const now = currentTime.value.getTime();
+                    const diff = target - now;
+
+                    if (diff <= 0) return "00:00:00";
+
+                    const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
+                    const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+                    const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+                    return `${h}:${m}:${s}`;
+                };
+
+                const startQuiz = async (id) => {
+                    if (!confirm("Start the quiz timer now?")) return;
+                    try {
+                        const res = await api.post(`/api/student/quizzes/${id}/start`);
+                        window.location.href = `/quiz?session_id=${res.session_id}`;
+                    } catch (e) { alert(e.detail || "Entry restricted."); }
+                };
+
+                const formatDate = (dStr) => {
+                    if (!dStr) return "";
+                    return new Date(dStr + "Z").toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                };
+
+                const logout = () => api.logout();
+
+                onMounted(() => {
+                    loadQuizzes();
+                    ticker = setInterval(() => { currentTime.value = new Date(); }, 1000);
+                });
+
+                onBeforeUnmount(() => { if (ticker) clearInterval(ticker); });
+
+                return { config, activeTab, quizzes, loading, displayQuizzes, startQuiz, formatDate, getCountdown, getQuizState, logout };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

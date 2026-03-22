@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Structure | Admin</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        
+        <navbar></navbar>
+        </nav>
+
+        <main class="max-w-[1600px] mx-auto px-6 py-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                
+                <!-- 1. DEPARTMENTS -->
+                <section class="column-card rounded-2xl overflow-hidden">
+                    <div class="p-5 border-b border-zinc-800">
+                        <h3 class="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mb-4">1. Departments</h3>
+                        <form @submit.prevent="createDepartment" class="space-y-2">
+                            <input v-model="newDept.name" type="text" placeholder="Department Name" class="input-field text-xs" required>
+                            <button type="submit" class="w-full py-2 bg-white text-black text-[10px] font-bold uppercase rounded-lg transition hover:bg-zinc-200">Create</button>
+                        </form>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                        <div v-for="dept in departments" :key="dept.id" @click="selectDepartment(dept)"
+                             :class="['row-item group p-4 rounded-xl cursor-pointer hover:bg-zinc-900/50 flex justify-between items-start', selectedDept?.id === dept.id ? 'active' : '']">
+                            <span class="text-white font-medium text-sm flex items-center gap-2">
+                                <span>{{ dept.name }}</span>
+                                <span v-if="!dept.is_active" class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">Inactive</span>
+                            </span>
+                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button @click.stop="openEditModal('dept', dept)" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+                                <button @click.stop="deleteItem('dept', dept.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. PROGRAMS -->
+                <section class="column-card rounded-2xl overflow-hidden">
+                    <div class="p-5 border-b border-zinc-800">
+                        <h3 class="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mb-4">2. Programs</h3>
+                        <form v-if="selectedDept" @submit.prevent="createProgram" class="space-y-2">
+                            <input v-model="newProgramName" type="text" placeholder="e.g. BS Software Eng" class="input-field text-xs" required>
+                            <button type="submit" class="w-full py-2 bg-zinc-800 text-white text-[10px] font-bold uppercase rounded-lg">Add Program</button>
+                        </form>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-2">
+                        <div v-if="!selectedDept" class="empty-placeholder p-6 rounded-2xl text-[9px] uppercase tracking-widest leading-relaxed">Select Dept</div>
+                        <div v-else v-for="prog in programs" :key="prog.id" @click="selectProgram(prog)"
+                             :class="['row-item group p-4 rounded-xl cursor-pointer hover:bg-zinc-900/50 flex justify-between items-start', selectedProgram?.id === prog.id ? 'active' : '']">
+                            <span class="text-white font-medium text-sm">{{ prog.name }}</span>
+                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button @click.stop="openEditModal('prog', prog)" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+                                <button @click.stop="deleteItem('prog', prog.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. SESSIONS -->
+                <section class="column-card rounded-2xl overflow-hidden">
+                    <div class="p-5 border-b border-zinc-800">
+                        <h3 class="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mb-4">3. Sessions</h3>
+                        <form v-if="selectedProgram" @submit.prevent="createSemester" class="space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <select v-model="newSem.season" class="input-field text-xs"><option>Fall</option><option>Spring</option></select>
+                                <input v-model="newSem.year" type="number" class="input-field text-xs" placeholder="Year">
+                            </div>
+                            <button type="submit" class="w-full py-2 bg-zinc-800 text-white text-[10px] font-bold uppercase rounded-lg">Add Session</button>
+                        </form>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-2">
+                        <div v-if="!selectedProgram" class="empty-placeholder p-6 rounded-2xl text-[9px] uppercase tracking-widest leading-relaxed">Select Program</div>
+                        <div v-else v-for="sem in semesters" :key="sem.id" @click="selectSemester(sem)"
+                             :class="['row-item group p-4 rounded-xl cursor-pointer hover:bg-zinc-900/50 flex justify-between items-start', selectedSem?.id === sem.id ? 'active' : '']">
+                            <div>
+                                <p class="text-white font-medium text-sm flex items-center gap-2">
+                                    <span>{{ sem.season }} {{ sem.year }}</span>
+                                    <span v-if="!sem.is_active" class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">Inactive</span>
+                                </p>
+                                <p class="text-[9px] font-mono text-zinc-500 uppercase">{{ sem.code }}</p>
+                            </div>
+                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button @click.stop="openEditModal('sem', sem)" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+                                <button @click.stop="deleteItem('sem', sem.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. CLASS GROUPS -->
+                <section class="column-card rounded-2xl overflow-hidden">
+                    <div class="p-5 border-b border-zinc-800">
+                        <h3 class="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mb-4">4. Classes</h3>
+                        <form v-if="selectedSem" @submit.prevent="createClass" class="space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <select v-model="newClassSemNum" class="input-field text-xs"><option v-for="n in 8" :value="n">{{n}}th Sem</option></select>
+                                <input v-model="newClassSection" type="text" placeholder="Sec (A/B)" class="input-field text-xs uppercase" required>
+                            </div>
+                            <button type="submit" class="w-full py-2 bg-blue-600 text-white text-[10px] font-bold uppercase rounded-lg hover:bg-blue-500">Create Group</button>
+                        </form>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-2">
+                        <div v-if="!selectedSem" class="empty-placeholder p-6 rounded-2xl text-[9px] uppercase tracking-widest leading-relaxed">Select Session</div>
+                        <div v-else v-for="cls in classes" :key="cls.id" class="group p-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 flex justify-between items-start">
+                            <div>
+                                <p class="text-white font-medium text-sm">{{ cls.name }}</p>
+                                <p class="text-[10px] text-blue-500 font-mono mt-1 uppercase tracking-tight">{{ cls.code }}</p>
+                            </div>
+                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button @click.stop="openEditModal('cls', cls)" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
+                                <button @click.stop="deleteItem('cls', cls.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- UNIVERSAL EDIT MODAL -->
+        <div v-if="editModal.show" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div class="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-2xl p-8 shadow-2xl">
+                <h3 class="text-white font-bold text-lg mb-6">Edit Entry</h3>
+                <div class="space-y-4">
+                    <!-- Name for Dept or Program -->
+                    <div v-if="editModal.type === 'dept' || editModal.type === 'prog'">
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Name</label>
+                        <input v-model="editModal.data.name" type="text" class="input-field">
+                    </div>
+                    <div v-if="editModal.type === 'dept'">
+                        <label class="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer">
+                            <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Active</span>
+                            <input type="checkbox" v-model="editModal.data.is_active" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-600">
+                        </label>
+                    </div>
+                    <!-- Season/Year for Semester -->
+                    <div v-if="editModal.type === 'sem'">
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Session</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select v-model="editModal.data.season" class="input-field text-xs"><option>Fall</option><option>Spring</option></select>
+                            <input v-model="editModal.data.year" type="number" class="input-field text-xs">
+                        </div>
+                        <label class="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer mt-3">
+                            <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Active</span>
+                            <input type="checkbox" v-model="editModal.data.is_active" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-600">
+                        </label>
+                    </div>
+                    <!-- Number/Section for Class -->
+                    <div v-if="editModal.type === 'cls'">
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Semester & Section</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select v-model="editModal.data.semester_number" class="input-field text-xs"><option v-for="n in 8" :value="n">{{n}}th</option></select>
+                            <input v-model="editModal.data.section" type="text" class="input-field text-xs uppercase">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-10">
+                    <button @click="editModal.show = false" class="flex-1 py-3 bg-zinc-800 text-zinc-400 rounded-xl text-[10px] font-bold uppercase hover:text-white transition">Cancel</button>
+                    <button @click="submitEdit" class="flex-1 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-bold uppercase hover:bg-blue-500 transition">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const departments = ref([]); programs = ref([]); semesters = ref([]); classes = ref([]);
+                const selectedDept = ref(null); selectedProgram = ref(null); selectedSem = ref(null);
+                const newDept = ref({ name: '' }); newProgramName = ref(''); newSem = ref({ season: 'Fall', year: 2026 });
+                const newClassSemNum = ref(1); newClassSection = ref('A');
+                const editModal = ref({ show: false, type: '', data: {} });
+
+                const loadDepartments = async () => { departments.value = await api.get('/api/admin/departments') || []; };
+
+                const selectDepartment = async (dept) => {
+                    selectedDept.value = dept; selectedProgram.value = null; selectedSem.value = null;
+                    programs.value = await api.get(`/api/admin/departments/${dept.id}/programs`) || [];
+                };
+
+                const selectProgram = async (prog) => {
+                    selectedProgram.value = prog; selectedSem.value = null;
+                    semesters.value = await api.get(`/api/admin/departments/${selectedDept.value.id}/semesters`) || [];
+                };
+
+                const selectSemester = async (sem) => {
+                    selectedSem.value = sem;
+                    const res = await api.get(`/api/admin/semesters/${sem.id}/classes?program_id=${selectedProgram.value.id}`);
+                    classes.value = res || [];
+                };
+
+                const createDepartment = async () => { await api.post('/api/admin/departments', newDept.value); newDept.value.name = ''; loadDepartments(); };
+                const createProgram = async () => {
+                    await api.post('/api/admin/programs', { name: newProgramName.value, department_id: selectedDept.value.id });
+                    newProgramName.value = ''; selectDepartment(selectedDept.value);
+                };
+                const createSemester = async () => {
+                    const res = await api.post('/api/admin/semesters', newSem.value);
+                    await api.post('/api/admin/dept-semesters', { department_id: selectedDept.value.id, semester_id: res.id });
+                    selectProgram(selectedProgram.value);
+                };
+                const createClass = async () => {
+                    await api.post('/api/admin/classes', { 
+                        name: `${selectedProgram.value.name} ${newClassSemNum.value}${newClassSection.value}`, 
+                        program_id: selectedProgram.value.id, semester_id: selectedSem.value.id,
+                        semester_number: newClassSemNum.value, section: newClassSection.value
+                    });
+                    selectSemester(selectedSem.value);
+                };
+
+                const openEditModal = (type, item) => { editModal.value = { show: true, type, data: JSON.parse(JSON.stringify(item)) }; };
+                
+                const submitEdit = async () => {
+                    const { type, data } = editModal.value;
+                    let url = type === 'dept' ? `/api/admin/departments/${data.id}` : type === 'prog' ? `/api/admin/programs/${data.id}` : type === 'sem' ? `/api/admin/semesters/${data.id}` : `/api/admin/classes/${data.id}`;
+                    await api.put(url, data);
+                    editModal.value.show = false;
+                    if(type === 'dept') loadDepartments(); else if(type === 'prog') selectDepartment(selectedDept.value); else if(type === 'sem') selectProgram(selectedProgram.value); else selectSemester(selectedSem.value);
+                };
+
+                const deleteItem = async (type, id) => {
+                    if(!confirm("Delete this entry and its links?")) return;
+                    let url = type === 'dept' ? `/api/admin/departments/${id}` : type === 'prog' ? `/api/admin/programs/${id}` : type === 'sem' ? `/api/admin/semesters/${id}` : `/api/admin/classes/${id}`;
+                    try {
+                        await api.delete(url);
+                        if(type === 'dept') { loadDepartments(); selectedDept.value = null; }
+                        else if(type === 'prog') selectDepartment(selectedDept.value);
+                        else if(type === 'sem') selectProgram(selectedProgram.value);
+                        else selectSemester(selectedSem.value);
+                    } catch(e) { alert("Deletion restricted."); }
+                };
+
+                const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('role'); window.location.href = '/'; };
+
+                onMounted(loadDepartments);
+                return { config, departments, programs, semesters, classes, selectedDept, selectedProgram, selectedSem, newDept, newProgramName, newSem, newClassSemNum, newClassSection, editModal, selectDepartment, selectProgram, selectSemester, createDepartment, createProgram, createSemester, createClass, openEditModal, submitEdit, deleteItem, logout };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>

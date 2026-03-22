@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Quiz | Portal</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#050505">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/navbar.js"></script>
+</head>
+<body class="antialiased bg-[#050505]">
+    <div id="app" v-cloak>
+        <navbar></navbar>
+
+        <main class="max-w-3xl mx-auto py-12 px-6">
+            <header class="mb-10">
+                <h2 class="text-3xl font-bold text-white tracking-tight">Create Quiz</h2>
+                <p class="text-zinc-500 mt-1">Configure your quiz settings and schedule.</p>
+            </header>
+
+            <form @submit.prevent="submitQuizSetup" class="admin-card space-y-8">
+                <!-- Subject Selection -->
+                <section>
+                    <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Select Subject</label>
+                    <select v-model="quiz.subject_id" class="input-field text-sm cursor-pointer" required>
+                        <option :value="null">Choose a subject...</option>
+                        <option v-for="sub in uniqueSubjects" :key="sub.subject_id" :value="sub.subject_id">
+                            ({{ sub.subject_code }}) {{ sub.subject_name }}
+                        </option>
+                    </select>
+                </section>
+
+                <!-- Basic Info -->
+                <section class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Quiz Title</label>
+                        <input v-model="quiz.title" type="text" placeholder="e.g. Midterm Exam" class="input-field mt-1.5" required>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Description</label>
+                        <textarea v-model="quiz.description" rows="3" class="input-field mt-1.5"></textarea>
+                    </div>
+                </section>
+
+                <div class="h-px bg-zinc-800"></div>
+
+                <!-- Scheduling -->
+                <section class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Duration (Minutes)</label>
+                            <input v-model.number="quizDurationMinutes" type="number" class="input-field mt-1.5 font-mono" required>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Max Attempts</label>
+                            <input v-model.number="quiz.max_attempts" type="number" class="input-field mt-1.5 font-mono" required>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pass Percentage</label>
+                            <input v-model.number="quiz.pass_percentage" type="number" min="0" max="100" step="0.1" class="input-field mt-1.5 font-mono" required>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Available From</label>
+                            <input v-model="quiz.available_from" type="datetime-local" class="input-field mt-1.5 text-xs" required>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Available Until</label>
+                            <input v-model="quiz.available_until" type="datetime-local" class="input-field mt-1.5 text-xs" required>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="h-px bg-zinc-800"></div>
+
+                <!-- Toggles -->
+                <section class="space-y-3">
+                    <label class="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer group">
+                        <span class="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Shuffle Questions</span>
+                        <input type="checkbox" v-model="quiz.shuffle_questions" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-600">
+                    </label>
+                    <label class="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer group">
+                        <span class="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Enable Anti-Cheat</span>
+                        <input type="checkbox" v-model="quiz.anti_cheat_enabled" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-600">
+                    </label>
+                    <label class="flex items-center justify-between p-4 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer group">
+                        <span class="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Show Answers After Grading</span>
+                        <input type="checkbox" v-model="quiz.show_answers_after" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-600">
+                    </label>
+                </section>
+
+                <div class="flex justify-end pt-4">
+                    <button type="submit" class="btn-primary w-full md:w-auto md:px-6 md:py-3" :disabled="isSubmitting">
+                        {{ isSubmitting ? 'Saving...' : 'Save & Add Questions' }}
+                    </button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        const formatForInput = (date) => {
+            const pad = (n) => n.toString().padStart(2, '0');
+            const year = date.getFullYear();
+            const month = pad(date.getMonth() + 1);
+            const day = pad(date.getDate());
+            const hours = pad(date.getHours());
+            const minutes = pad(date.getMinutes());
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        };
+
+        const app = createApp({
+            setup() {
+                const config = ref(CONFIG);
+                const isSubmitting = ref(false);
+                const quizDurationMinutes = ref(30);
+                const assignments = ref([]);
+
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                
+                const fromDate = new Date(tomorrow);
+                fromDate.setHours(10, 0, 0, 0);
+
+                const untilDate = new Date(tomorrow);
+                untilDate.setHours(10, 30, 0, 0);
+
+                const quiz = ref({
+                    title: '', subject_id: null, description: '', duration_seconds: 1800, max_attempts: 1,
+                    shuffle_questions: true, anti_cheat_enabled: true, show_answers_after: false,
+                    is_published: false, 
+                    pass_percentage: 50.0,
+                    available_from: formatForInput(fromDate), 
+                    available_until: formatForInput(untilDate)
+                });
+
+                const uniqueSubjects = computed(() => {
+                    const seen = new Set();
+                    return assignments.value.filter(a => {
+                        if (seen.has(a.subject_id)) return false;
+                        seen.add(a.subject_id);
+                        return true;
+                    });
+                });
+
+                const loadAssignments = async () => {
+                    try { 
+                        assignments.value = await api.get('/api/teacher/assignments') || []; 
+                    } catch (e) { console.error("Load fail"); }
+                };
+
+                const submitQuizSetup = async () => {
+                    if (!quiz.value.subject_id) { alert("Select a subject"); return; }
+                    isSubmitting.value = true;
+                    try {
+                        const payload = {
+                            ...quiz.value,
+                            subject_id: parseInt(quiz.value.subject_id),
+                            duration_seconds: parseInt(quizDurationMinutes.value) * 60,
+                            max_attempts: parseInt(quiz.value.max_attempts),
+                            pass_percentage: parseFloat(quiz.value.pass_percentage),
+                            available_from: new Date(quiz.value.available_from).toISOString(),
+                            available_until: new Date(quiz.value.available_until).toISOString()
+                        };
+                        const res = await api.post('/api/teacher/quizzes', payload);
+                        window.location.href = `/teacher/questions?quiz_id=${res.id}`;
+                    } catch (e) {
+                        alert('Sync error: ' + JSON.stringify(e.detail));
+                        isSubmitting.value = false;
+                    }
+                };
+
+                onMounted(loadAssignments);
+                return { config, quiz, quizDurationMinutes, isSubmitting, uniqueSubjects, submitQuizSetup };
+            }
+        });
+
+        if (window.NavbarComponent) {
+            app.component('Navbar', window.NavbarComponent);
+        }
+
+        app.mount('#app');
+    </script>
+</body>
+</html>
