@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime, timezone
 from backend import models, schemas, auth
@@ -174,10 +175,14 @@ def get_classes_by_context(
     sem_id: int, 
     program_id: Optional[int] = None, 
     department_id: Optional[int] = None, 
+    include_inactive: bool = False,
     db: Session = Depends(get_db), 
     admin_user: models.User = Depends(auth.get_current_admin)
 ):
     query = db.query(models.Class).filter(models.Class.semester_id == sem_id)
+
+    if not include_inactive:
+        query = query.filter(models.Class.is_active == True)
 
     if program_id:
         query = query.filter(models.Class.program_id == program_id)
@@ -196,7 +201,7 @@ def create_class(cls: schemas.ClassCreate, db: Session = Depends(get_db), admin_
     suf = "th" if 11 <= n <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     sec = cls.section.strip().upper()
     
-    full_name = f"{prog.name} — {n}{suf} Semester (Section {sec})"
+    full_name = f"{prog.name} - {n}{suf} (Section {sec})"
     p_pre = prog.name.replace("BS ","")[:4].upper().strip()
     gen_code = f"{prog.department_id}-{p_pre}-{n}{sec}-{sess.code}".upper().replace(" ","")
     
@@ -206,9 +211,48 @@ def create_class(cls: schemas.ClassCreate, db: Session = Depends(get_db), admin_
     new_c = models.Class(program_id=cls.program_id, semester_id=cls.semester_id, semester_number=n, section=sec, name=full_name, code=gen_code, is_active=True)
     db.add(new_c); db.commit(); db.refresh(new_c); return new_c
 
-@router.get("/semesters/{sem_id}/classes", response_model=List[schemas.ClassResponse])
-def list_context_classes(sem_id: int, program_id: int, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
-    return db.query(models.Class).filter_by(semester_id=sem_id, program_id=program_id).all()
+@router.put("/classes/{class_id}", response_model=schemas.ClassResponse)
+def update_class(class_id: int, update: schemas.ClassUpdate, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
+    cls = db.query(models.Class).get(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    data = update.model_dump(exclude_unset=True)
+    if "is_active" in data:
+        cls.is_active = data["is_active"]
+
+    recompute = False
+    if "semester_number" in data and data["semester_number"] is not None:
+        cls.semester_number = int(data["semester_number"])
+        recompute = True
+    if "section" in data and data["section"] is not None:
+        cls.section = data["section"].strip().upper()
+        recompute = True
+
+    if recompute:
+        prog = db.query(models.Program).get(cls.program_id)
+        sess = db.query(models.Semester).get(cls.semester_id)
+        if not prog or not sess:
+            raise HTTPException(status_code=400, detail="Invalid class data")
+
+        n = int(cls.semester_number)
+        suf = "th" if 11 <= n <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        sec = (cls.section or "").strip().upper()
+
+        full_name = f"{prog.name} - {n}{suf} (Section {sec})"
+        p_pre = prog.name.replace("BS ", "")[:4].upper().strip()
+        gen_code = f"{prog.department_id}-{p_pre}-{n}{sec}-{sess.code}".upper().replace(" ", "")
+
+        existing = db.query(models.Class).filter(models.Class.code == gen_code, models.Class.id != cls.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Class code already exists")
+
+        cls.name = full_name
+        cls.code = gen_code
+
+    db.commit()
+    db.refresh(cls)
+    return cls
 
 # Mapping Subjects to a Class Group
 @router.post("/classes/{class_id}/subjects")
@@ -235,8 +279,89 @@ def get_class_subjects_detailed(class_id: int, db: Session = Depends(get_db), ad
 
 @router.post("/teachers", response_model=schemas.UserResponse)
 def provision_teacher(t: schemas.TeacherCreate, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
+    existing = db.query(models.User).filter(models.User.registration_id == t.registration_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Registration ID already exists")
+
     new_t = models.User(registration_id=t.registration_id, display_name=t.display_name, password_hash=auth.get_password_hash(t.password), role="teacher", is_active=True)
-    db.add(new_t); db.commit(); db.refresh(new_t); return new_t
+    db.add(new_t)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Could not create teacher (duplicate or invalid data)")
+    db.refresh(new_t)
+    return new_t
+
+@router.put("/teachers/{teacher_id}", response_model=schemas.UserResponse)
+def update_teacher(teacher_id: int, update: schemas.TeacherUpdate, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
+    teacher = db.query(models.User).get(teacher_id)
+    if not teacher or teacher.role != "teacher":
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    data = update.model_dump(exclude_unset=True)
+    if "display_name" in data and data["display_name"] is not None:
+        teacher.display_name = data["display_name"]
+
+    if "registration_id" in data and data["registration_id"] is not None:
+        reg_id = data["registration_id"]
+        existing = db.query(models.User).filter(models.User.registration_id == reg_id, models.User.id != teacher.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Registration ID already exists")
+        teacher.registration_id = reg_id
+
+    if "is_active" in data and data["is_active"] is not None:
+        teacher.is_active = bool(data["is_active"])
+
+    if "password" in data and data["password"]:
+        teacher.password_hash = auth.get_password_hash(data["password"])
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Could not update teacher (duplicate or invalid data)")
+
+    db.refresh(teacher)
+    return teacher
+
+@router.delete("/teachers/{teacher_id}")
+def delete_teacher(teacher_id: int, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
+    teacher = db.query(models.User).get(teacher_id)
+    if not teacher or teacher.role != "teacher":
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    assignments_count = db.query(models.TeacherAssignment).filter_by(teacher_id=teacher_id).count()
+    quizzes_count = db.query(models.Quiz).filter_by(created_by=teacher_id).count()
+    graded_count = db.query(models.Answer).filter_by(graded_by=teacher_id).count()
+    sessions_count = db.query(models.QuizSession).filter_by(user_id=teacher_id).count()
+    overrides_count = db.query(models.QuizSession).filter_by(score_overridden_by=teacher_id).count()
+
+    reasons: list[str] = []
+    if assignments_count:
+        reasons.append(f"{assignments_count} subject assignment(s)")
+    if quizzes_count:
+        reasons.append(f"{quizzes_count} quiz(zes) created")
+    if graded_count:
+        reasons.append(f"{graded_count} graded answer(s)")
+    if sessions_count:
+        reasons.append(f"{sessions_count} quiz session(s) under this user")
+    if overrides_count:
+        reasons.append(f"{overrides_count} score override(s) recorded")
+
+    if reasons:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "This faculty account has linked data and cannot be deleted.",
+                "reasons": reasons,
+                "suggestion": "Deactivate the account instead (Active = false)."
+            },
+        )
+
+    db.query(models.User).filter_by(id=teacher_id).delete()
+    db.commit()
+    return {"status": "deleted"}
 
 # Triple Junction Assignment: Teacher + Class + Subject
 class AssignmentRequest(BaseModel):
@@ -298,6 +423,7 @@ def get_global_results(dept_id: Optional[int] = None, sem_id: Optional[int] = No
         if class_id: query = query.filter(models.Class.id == class_id)
     sessions = query.all()
     output = []
+    any_flag_repairs = False
     for s in sessions:
         u, q = db.query(models.User).get(s.user_id), db.query(models.Quiz).get(s.quiz_id)
         qc = db.query(models.QuizClass).filter_by(quiz_id=q.id).first()
@@ -307,6 +433,10 @@ def get_global_results(dept_id: Optional[int] = None, sem_id: Optional[int] = No
         
         # Get cheat events for this session
         cheat_events = db.query(models.CheatEvent).filter_by(session_id=s.id).order_by(models.CheatEvent.occurred_at).all()
+        computed_flag_count = len(cheat_events)
+        if s.cheat_flag_count != computed_flag_count:
+            s.cheat_flag_count = computed_flag_count
+            any_flag_repairs = True
         cheat_events_list = [{
             "id": e.id,
             "event_type": e.event_type,
@@ -330,13 +460,16 @@ def get_global_results(dept_id: Optional[int] = None, sem_id: Optional[int] = No
             "is_score_overridden": s.score_override is not None,
             "score_override_reason": s.score_override_reason,
             "total_points": tp, 
-            "flags": s.cheat_flag_count, 
+            "flags": computed_flag_count, 
             "cheat_events": cheat_events_list,
             "submitted_at": s.submitted_at,
             "pass_percentage": q.pass_percentage,
             "percentage_score": round(percentage_score, 1),
             "is_passed": is_passed
         })
+
+    if any_flag_repairs:
+        db.commit()
     return output
 
 @router.post("/sessions/{session_id}/override-zero")

@@ -156,6 +156,7 @@ def get_quiz_results(quiz_id: int, db: Session = Depends(get_db), teacher: model
     sessions = db.query(models.QuizSession).filter_by(quiz_id=quiz_id).all()
     
     res_list = []
+    any_flag_repairs = False
     for s in sessions:
         student = db.query(models.User).get(s.user_id)
         class_link = db.query(models.QuizClass).filter_by(quiz_id=quiz_id).first()
@@ -163,6 +164,10 @@ def get_quiz_results(quiz_id: int, db: Session = Depends(get_db), teacher: model
         
         # Get cheat events for this session
         cheat_events = db.query(models.CheatEvent).filter_by(session_id=s.id).order_by(models.CheatEvent.occurred_at).all()
+        computed_flag_count = len(cheat_events)
+        if s.cheat_flag_count != computed_flag_count:
+            s.cheat_flag_count = computed_flag_count
+            any_flag_repairs = True
         cheat_events_list = [{
             "id": e.id,
             "event_type": e.event_type,
@@ -189,12 +194,15 @@ def get_quiz_results(quiz_id: int, db: Session = Depends(get_db), teacher: model
             "score_override_reason": s.score_override_reason,
             "total_points": total_points,
             "result_released": s.result_released,
-            "cheat_flag_count": s.cheat_flag_count,
+            "cheat_flag_count": computed_flag_count,
             "cheat_events": cheat_events_list,
             "pass_percentage": quiz.pass_percentage,
             "percentage_score": round(percentage_score, 1),
             "is_passed": is_passed
         })
+
+    if any_flag_repairs:
+        db.commit()
     return {"quiz": {"title": quiz.title}, "sessions": res_list}
 
 @router.get("/sessions/{session_id}/grade")

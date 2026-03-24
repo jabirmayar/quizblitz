@@ -122,7 +122,7 @@ const NavbarComponent = {
 
         const token = localStorage.getItem('token');
         const payload = getJwtPayload(token);
-        const role = Vue.ref((payload && payload.role) ? payload.role : (localStorage.getItem('role') || 'student'));
+        const role = Vue.ref((payload && payload.role) ? payload.role : 'student');
 
         const config = Vue.computed(() => window.CONFIG || { APP_NAME: 'QuizBlitz' });
 
@@ -141,7 +141,7 @@ const NavbarComponent = {
 
         const logout = () => {
             localStorage.removeItem('token');
-            localStorage.removeItem('role');
+            localStorage.removeItem('role'); // legacy
             localStorage.removeItem('displayName');
             window.location.href = '/';
         };

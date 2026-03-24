@@ -15,6 +15,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/style.css">
     <script src="../js/config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script>Auth.requireAuth({ roles: ['admin'] });</script>
     <script src="../js/api.js"></script>
     <script src="../js/navbar.js"></script>
 </head>
@@ -98,7 +100,6 @@
                             </div>
                             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 <button @click.stop="openEditModal('sem', sem)" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
-                                <button @click.stop="deleteItem('sem', sem.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
                             </div>
                         </div>
                     </div>
@@ -120,12 +121,14 @@
                         <div v-if="!selectedSem" class="empty-placeholder p-6 rounded-2xl text-[9px] uppercase tracking-widest leading-relaxed">Select Session</div>
                         <div v-else v-for="cls in classes" :key="cls.id" class="group p-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 flex justify-between items-start">
                             <div>
-                                <p class="text-white font-medium text-sm">{{ cls.name }}</p>
+                                <p class="text-white font-medium text-sm flex items-center gap-2">
+                                    <span>{{ cls.name }}</span>
+                                    <span v-if="!cls.is_active" class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">Inactive</span>
+                                </p>
                                 <p class="text-[10px] text-blue-500 font-mono mt-1 uppercase tracking-tight">{{ cls.code }}</p>
                             </div>
                             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 <button @click.stop="openEditModal('cls', cls)" class="action-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
-                                <button @click.stop="deleteItem('cls', cls.id)" class="action-btn del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
                             </div>
                         </div>
                     </div>
@@ -168,6 +171,10 @@
                             <select v-model="editModal.data.semester_number" class="input-field text-xs"><option v-for="n in 8" :value="n">{{n}}th</option></select>
                             <input v-model="editModal.data.section" type="text" class="input-field text-xs uppercase">
                         </div>
+                        <label class="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-zinc-800 cursor-pointer mt-3">
+                            <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Active</span>
+                            <input type="checkbox" v-model="editModal.data.is_active" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-600">
+                        </label>
                     </div>
                 </div>
                 <div class="flex gap-2 mt-10">
@@ -203,7 +210,7 @@
 
                 const selectSemester = async (sem) => {
                     selectedSem.value = sem;
-                    const res = await api.get(`/api/admin/semesters/${sem.id}/classes?program_id=${selectedProgram.value.id}`);
+                    const res = await api.get(`/api/admin/semesters/${sem.id}/classes?program_id=${selectedProgram.value.id}&include_inactive=1`);
                     classes.value = res || [];
                 };
 
@@ -237,6 +244,10 @@
                 };
 
                 const deleteItem = async (type, id) => {
+                    if (type === 'sem' || type === 'cls') {
+                        alert("Use Edit → Active checkbox to deactivate.");
+                        return;
+                    }
                     if(!confirm("Delete this entry and its links?")) return;
                     let url = type === 'dept' ? `/api/admin/departments/${id}` : type === 'prog' ? `/api/admin/programs/${id}` : type === 'sem' ? `/api/admin/semesters/${id}` : `/api/admin/classes/${id}`;
                     try {

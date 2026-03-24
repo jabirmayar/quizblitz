@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
+from starlette.responses import PlainTextResponse
 
 from backend.routers import public, admin, teacher, student
 from backend.database import engine, Base
@@ -28,6 +29,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def block_sensitive_paths(request: Request, call_next):
+    # Prevent accidental exposure of dotfiles (e.g. /.env) via StaticFiles mount.
+    # Allow /.well-known/* for TLS/ACME or similar setups.
+    segments = [s for s in request.url.path.split("/") if s]
+    for seg in segments:
+        if seg.startswith(".") and seg != ".well-known":
+            return PlainTextResponse("Not found", status_code=404)
+    return await call_next(request)
 
 @app.middleware("http")
 async def clean_html_urls(request: Request, call_next):

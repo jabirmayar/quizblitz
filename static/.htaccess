@@ -1,4 +1,17 @@
 RewriteEngine On
+# Never serve dotfiles from the static directory
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^\.">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
 # If the requested name isn't a directory
 RewriteCond %{REQUEST_FILENAME} !-d
 # And if the requested name + .html IS a file

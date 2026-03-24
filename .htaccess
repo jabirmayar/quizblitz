@@ -1,0 +1,35 @@
+# Security: never serve dotfiles (e.g. .env) from Apache/Laragon.
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^\.">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# If the repo is deployed with files inside `static/`, serve the app from there.
+RewriteEngine On
+
+# Don't rewrite API or ACME well-known endpoints
+RewriteRule ^api(/|$) - [L]
+RewriteRule ^\.well-known(/|$) - [L]
+
+# Home -> static index
+RewriteRule ^$ static/index.html [L]
+
+# Serve existing files/dirs as-is
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Pretty URLs -> /static/<path>.html when it exists
+RewriteCond %{DOCUMENT_ROOT}/static/$1.html -f
+RewriteRule ^(.+)$ static/$1.html [L]
+
+# Assets -> /static/<path> when it exists
+RewriteCond %{DOCUMENT_ROOT}/static/$1 -f
+RewriteRule ^(.+)$ static/$1 [L]

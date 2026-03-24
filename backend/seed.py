@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+if __name__ == "__main__" and __package__ is None:
+    sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_password_hash
@@ -28,3 +34,6 @@ def seed_admin():
         print(f"❌ Error seeding admin: {e}")
     finally:
         db.close()
+
+if __name__ == "__main__":
+    seed_admin()

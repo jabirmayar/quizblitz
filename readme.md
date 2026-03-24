@@ -18,9 +18,9 @@ Students self-register under a department, semester, and class. Teachers create 
 |---|---|
 | Backend | FastAPI (Python 3.11+) |
 | Database | MySQL 8 / MariaDB 10.6+ |
-| ORM | SQLAlchemy + Alembic |
+| ORM | SQLAlchemy |
 | Auth | JWT HS256 + bcrypt |
-| Frontend | Vuejs |
+| Frontend | Vue 3 (CDN) |
 | Process | systemd |
 
 ---
@@ -31,6 +31,7 @@ Students self-register under a department, semester, and class. Teachers create 
 - Departments, programs, semesters, and classes managed by admin
 - Semesters are global but activated per-department (e.g. Summer 2025 only exists for certain departments)
 - Subjects belong to departments and are assigned to specific classes
+- Classes and semesters are deactivated via `is_active` (not hard-deleted)
 
 **Users**
 - Admin account seeded as user ID 1 on first run
@@ -69,7 +70,7 @@ Students self-register under a department, semester, and class. Teachers create 
 ## Project Structure
 
 ```
-/var/www/QuizBlitz/
+quiz-system/
 ├── backend/
 │   ├── main.py              # FastAPI app, startup, CORS
 │   ├── database.py          # MySQL engine, session factory
@@ -108,7 +109,7 @@ Students self-register under a department, semester, and class. Teachers create 
 │       ├── api.js
 │       ├── config.js
 │       └── navbar.js
-└── QuizBlitz.service           # systemd unit file
+└── quiz.service                # systemd unit file (example)
 ```
 
 ---
@@ -144,32 +145,35 @@ FLUSH PRIVILEGES;
 ### 2. Backend
 
 ```bash
-cd /var/www/QuizBlitz/backend
+cd /home/quiz/public_html
 
-pip3 install -r requirements.txt --break-system-packages
+python3 -m venv venv
+./venv/bin/pip install -r backend/requirements.txt
 
 # Copy and edit environment config
 cp .env.example .env
-# Set: DB_URL, JWT_SECRET, ADMIN_PASSWORD
+# Set at least: DATABASE_URL, SECRET_KEY
 
-# Run migrations
-alembic upgrade head
+# Ensure DB schema (creates tables if missing; does not alter existing tables)
+python3 -m backend.migrations
 
-# Seed admin user (ID = 1)
-python3 seed.py
+# Seed admin user (ID = 1) if missing
+python3 -m backend.seed
 ```
 
 ### 3. systemd Service
 
+The included `quiz.service` runs `uvicorn backend.main:app` on `127.0.0.1:8008`.
+
 ```bash
-cp QuizBlitz.service /etc/systemd/system/QuizBlitz.service
-systemctl daemon-reload
-systemctl enable QuizBlitz
-systemctl start QuizBlitz
+cp quiz.service /etc/systemd/system/quiz.service
+sudo systemctl daemon-reload
+sudo systemctl enable quiz.service
+sudo systemctl restart quiz.service
 
 # Verify
-systemctl status QuizBlitz
-curl http://127.0.0.1:8001/departments
+sudo systemctl status quiz.service
+curl http://127.0.0.1:8008/api/health
 ```
 
 ### 4. Apache VirtualHost
@@ -178,12 +182,13 @@ Add the following inside your `quiz.yourdomain.com` VirtualHost block in Virtual
 
 ```apache
 ProxyPreserveHost On
-ProxyPass /api/ http://127.0.0.1:8001/
-ProxyPassReverse /api/ http://127.0.0.1:8001/
+ProxyPass        /api/  http://127.0.0.1:8008/api/
+ProxyPassReverse /api/  http://127.0.0.1:8008/api/
 
-DocumentRoot /var/www/QuizBlitz/static
-FallbackResource /index.html
+DocumentRoot /home/quiz/public_html
 ```
+
+Note: keep the trailing slashes exactly as shown for `/api/` to avoid redirect issues with `POST` requests (e.g. login).
 
 Enable required modules if not already active:
 
@@ -200,24 +205,35 @@ SSL is managed by Virtualmin as normal.
 
 | Variable | Description | Example |
 |---|---|---|
-| `DB_URL` | SQLAlchemy MySQL connection string | `mysql+pymysql://QuizBlitz:pass@localhost/QuizBlitzdb` |
-| `JWT_SECRET` | Secret key for signing tokens | any long random string |
-| `JWT_EXPIRE_HOURS` | Token expiry in hours | `8` |
-| `ADMIN_PASSWORD` | Password set for the seeded admin | your choice |
+| `DATABASE_URL` | SQLAlchemy MySQL connection string | `mysql+pymysql://user:pass@localhost:3306/quiz_system` |
+| `SECRET_KEY` | Secret key for signing JWT tokens | any long random string |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiry in minutes | `480` |
 
 ---
+
+## Database Setup / Migrations
+
+There is no Alembic migration workflow yet. For a fresh database, the backend provides a simple table bootstrap using SQLAlchemy models (`Base.metadata.create_all()`).
+
+Run it anytime (safe to run multiple times):
+
+```bash
+python3 -m backend.migrations
+```
+
+Note: this does not alter existing tables/columns. If you change models after the DB is created, you must apply schema changes manually (or introduce Alembic).
 
 ## API
 
 All endpoints are under `/api/`. Authentication via `Authorization: Bearer <token>` header.
 
-**Public** (no auth): `GET /departments`, `POST /auth/register`, `POST /auth/login`
+**Public** (no auth): `GET /api/departments`, `POST /api/auth/register`, `POST /api/auth/login`
 
-**Student**: `GET /quizzes`, `POST /quizzes/{id}/start`, `GET /sessions/{id}/resume`, `POST /sessions/{id}/answer`, `POST /sessions/{id}/cheat`, `POST /sessions/{id}/submit`, `GET /sessions/{id}/result`
+**Student**: `GET /api/student/quizzes`, `POST /api/student/quizzes/{id}/start`, `GET /api/student/sessions/{id}/resume`, `POST /api/student/sessions/{id}/answer`, `POST /api/student/sessions/{id}/cheat`, `POST /api/student/sessions/{id}/submit`, `GET /api/student/sessions/{id}/result`
 
-**Teacher**: `GET /teacher/quizzes`, `POST /teacher/quizzes`, `POST /teacher/quizzes/{id}/questions`, `POST /teacher/quizzes/{id}/assign`, `GET /teacher/quizzes/{id}/results`, `POST /teacher/answers/{id}/grade`, `GET /teacher/questions/{id}/grade`
+**Teacher**: `GET /api/teacher/quizzes`, `POST /api/teacher/quizzes`, `POST /api/teacher/quizzes/{id}/questions`, `POST /api/teacher/quizzes/{id}/assign`, `GET /api/teacher/quizzes/{id}/results`, `GET /api/teacher/sessions/{id}/grade`, `POST /api/teacher/answers/{id}/grade`
 
-**Admin**: `POST /admin/departments`, `POST /admin/semesters`, `POST /admin/classes`, `POST /admin/teachers`, `POST /admin/teacher-assignments`, `POST /admin/students/bulk-move`, `GET /admin/results`, `GET /admin/users`
+**Admin**: `POST /api/admin/departments`, `POST /api/admin/semesters`, `POST /api/admin/classes`, `POST /api/admin/teachers`, `POST /api/admin/faculty-assignments`, `POST /api/admin/students/bulk-move`, `GET /api/admin/global-results`, `GET /api/admin/users`
 
 Full OpenAPI docs available at `/api/docs` when the server is running.
 
@@ -243,4 +259,4 @@ The MIT License (MIT). Please see [License File](LICENSE) for more information.
 
 If you discover any security-related issues, please email hello@jabirkhan.com.
 
-**Built with ❤️ by [DAA Creators](https://daacreators.com)**
+Built by DAA Creators (daacreators.com)

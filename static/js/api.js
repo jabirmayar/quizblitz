@@ -14,6 +14,13 @@ const api = {
             return null;
         }
     },
+
+    redirectToRoleHome(role) {
+        if (role === 'admin') window.location.href = '/admin/dashboard';
+        else if (role === 'teacher') window.location.href = '/teacher/dashboard';
+        else if (role === 'student') window.location.href = '/dashboard';
+        else window.location.href = '/';
+    },
     
     async request(endpoint, method = 'GET', body = null) {
         const token = localStorage.getItem('token');
@@ -31,12 +38,9 @@ const api = {
         }
 
         if (response.status === 403) {
-            alert("Security Alert: You do not have permission to access this data.");
             const payload = this.getJwtPayload(token);
-            const role = (payload && payload.role) ? payload.role : localStorage.getItem('role');
-            if (role === 'admin') window.location.href = '/admin/dashboard';
-            else if (role === 'teacher') window.location.href = '/teacher/dashboard';
-            else window.location.href = '/dashboard';
+            const role = (payload && payload.role) ? payload.role : null;
+            this.redirectToRoleHome(role);
             return;
         }
 
@@ -55,7 +59,7 @@ const api = {
 
     logout() {
         localStorage.removeItem('token');
-        localStorage.removeItem('role');
+        localStorage.removeItem('role'); // legacy
         localStorage.removeItem('displayName');
         window.location.href = '/';
     }

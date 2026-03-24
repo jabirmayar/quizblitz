@@ -167,6 +167,12 @@ class TeacherCreate(BaseModel):
     display_name: str
     password: str
 
+class TeacherUpdate(BaseModel):
+    registration_id: Optional[str] = None
+    display_name: Optional[str] = None
+    password: Optional[str] = None
+    is_active: Optional[bool] = None
+
 class TeacherClassAssign(BaseModel):
     teacher_id: int
     class_ids: List[int]
