@@ -25,16 +25,18 @@
         
         <navbar></navbar>
 
-        <main class="max-w-6xl mx-auto px-6 py-10">
-            <header class="flex justify-between items-center mb-10">
+        <main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+            <header class="flex flex-col gap-4 sm:gap-6 md:flex-row md:justify-between md:items-center mb-8 sm:mb-10">
                 <div>
-                    <h2 class="text-3xl font-bold text-white tracking-tight">Subject Management</h2>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">Subject Management</h2>
                     <p class="text-zinc-500 mt-1">Manage subjects and assign them to class groups.</p>
                 </div>
                 
-                <div class="flex gap-6 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800">
-                    <button @click="viewMode = 'master'" :class="{active: viewMode === 'master'}" class="tab-btn px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">Subject List</button>
-                    <button @click="viewMode = 'mapping'" :class="{active: viewMode === 'mapping'}" class="tab-btn px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300">Assign to Class</button>
+                <div class="w-full md:w-auto">
+                    <div class="flex gap-1 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800 w-full md:w-auto overflow-x-auto">
+                        <button @click="viewMode = 'master'" :class="{active: viewMode === 'master'}" class="tab-btn flex-1 md:flex-none px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 whitespace-nowrap">Subject List</button>
+                        <button @click="viewMode = 'mapping'" :class="{active: viewMode === 'mapping'}" class="tab-btn flex-1 md:flex-none px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 whitespace-nowrap">Assign to Class</button>
+                    </div>
                 </div>
             </header>
 
@@ -71,7 +73,8 @@
                         </div>
 
                         <div class="admin-card !p-0 overflow-hidden">
-                            <table class="w-full text-sm text-left">
+                            <div class="overflow-x-auto">
+                                <table class="w-full min-w-[520px] text-sm text-left">
                                 <thead class="bg-black/20 text-[10px] text-zinc-500 uppercase">
                                     <tr>
                                         <th class="px-6 py-4">Code</th>
@@ -82,15 +85,21 @@
                                 <tbody class="divide-y divide-zinc-800">
                                     <tr v-for="s in subjects" :key="s.id" class="group">
                                         <td class="px-6 py-4 font-mono text-xs text-blue-500 uppercase">{{ s.code }}</td>
-                                        <td class="px-6 py-4 text-white font-medium">{{ s.name }}</td>
+                                        <td class="px-6 py-4 text-white font-medium break-words">{{ s.name }}</td>
                                         <td class="px-6 py-4 text-right">
-                                            <button @click="deleteSubject(s.id)" class="action-btn del transition">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                                            </button>
+                                            <div class="flex justify-end gap-1">
+                                                <button @click="openEditSubject(s)" class="action-btn transition" title="Edit">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                                                </button>
+                                                <button @click="deleteSubject(s.id)" class="action-btn del transition" title="Delete">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
 
@@ -102,7 +111,7 @@
                                 <div class="space-y-1">
                                     <div v-for="c in deptClasses" :key="c.id" @click="selectClass(c)"
                                          :class="['mapping-card p-4 rounded-2xl cursor-pointer', selectedClass?.id === c.id ? 'border-blue-500 bg-blue-500/5' : '']">
-                                        <p class="text-sm text-white font-medium">{{ c.name }}</p>
+                                        <p class="text-sm text-white font-medium break-words">{{ c.name }}</p>
                                         <p class="text-[9px] text-zinc-500 font-mono uppercase">{{ c.code }}</p>
                                     </div>
                                 </div>
@@ -118,10 +127,15 @@
                                         <label v-for="s in subjects" :key="s.id" class="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.02] cursor-pointer">
                                             <div class="flex items-center gap-3">
                                                 <input type="checkbox" :value="s.id" v-model="selectedSubjectIds" class="w-4 h-4 rounded border-zinc-800 bg-black text-blue-600">
-                                                <span class="text-sm text-zinc-400">{{ s.name }}</span>
+                                                <span class="text-sm text-zinc-400 break-words">{{ s.name }}</span>
                                             </div>
                                         </label>
-                                        <button @click="saveCurriculum" class="w-full py-3 bg-blue-600 text-white text-[10px] font-bold uppercase rounded-xl mt-6">Save Assignments</button>
+                                        <button @click="saveCurriculum" :disabled="savingCurriculum" class="w-full py-3 bg-blue-600 text-white text-[10px] font-bold uppercase rounded-xl mt-6 hover:bg-blue-500 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                                            {{ savingCurriculum ? 'Saving...' : (saveCurriculumStatus === 'saved' ? 'Saved' : saveCurriculumStatus === 'error' ? 'Try Again' : 'Save Assignments') }}
+                                        </button>
+                                        <p v-if="saveCurriculumStatus === 'error'" class="mt-2 text-[10px] font-bold uppercase tracking-widest text-rose-400">
+                                            Could not save. Please try again.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -130,6 +144,30 @@
                 </div>
             </div>
         </main>
+
+        <!-- EDIT SUBJECT MODAL -->
+        <div v-if="editSubjectModal.show" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div class="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-3xl p-8 shadow-2xl">
+                <h3 class="text-white font-bold text-xl mb-2">Edit Subject</h3>
+                <p class="text-[10px] text-zinc-500 uppercase tracking-widest mb-6">Update subject info</p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Code</label>
+                        <input v-model="editSubjectModal.data.code" type="text" class="input-field text-sm font-mono uppercase" required>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Name</label>
+                        <input v-model="editSubjectModal.data.name" type="text" class="input-field text-sm" required>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 mt-8">
+                    <button @click="editSubjectModal.show = false" class="flex-1 py-3 bg-zinc-800 text-zinc-300 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:text-white transition">Cancel</button>
+                    <button @click="saveSubjectEdit" class="flex-1 py-3 bg-white text-black rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition">Save</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -145,6 +183,9 @@
                 const selectedClass = ref(null);
                 const selectedSubjectIds = ref([]);
                 const newSub = ref({ name: '', code: '' });
+                const editSubjectModal = ref({ show: false, data: { id: null, code: '', name: '' } });
+                const savingCurriculum = ref(false);
+                const saveCurriculumStatus = ref('idle'); // idle | saved | error
 
                 const loadDepts = async () => { departments.value = await api.get('/api/admin/departments') || []; };
                 
@@ -159,19 +200,46 @@
                 const selectClass = async (cls) => {
                     selectedClass.value = cls;
                     selectedSubjectIds.value = await api.get(`/api/admin/classes/${cls.id}/subjects`) || [];
+                    saveCurriculumStatus.value = 'idle';
                 };
 
                 const saveCurriculum = async () => {
+                    if (!selectedClass.value) return;
+                    if (savingCurriculum.value) return;
+                    savingCurriculum.value = true;
+                    saveCurriculumStatus.value = 'idle';
                     try {
                         await api.post(`/api/admin/classes/${selectedClass.value.id}/subjects`, selectedSubjectIds.value);
-                        alert("Saved.");
-                    } catch (e) { alert("Error"); }
+                        saveCurriculumStatus.value = 'saved';
+                        setTimeout(() => {
+                            if (saveCurriculumStatus.value === 'saved') saveCurriculumStatus.value = 'idle';
+                        }, 1200);
+                    } catch (e) {
+                        saveCurriculumStatus.value = 'error';
+                    } finally {
+                        savingCurriculum.value = false;
+                    }
                 };
 
                 const createSubject = async () => {
                     await api.post('/api/admin/subjects', { ...newSub.value, department_id: selectedDept.value.id });
                     newSub.value = { name: '', code: '' };
                     selectDept(selectedDept.value);
+                };
+
+                const openEditSubject = (sub) => {
+                    editSubjectModal.value = { show: true, data: { id: sub.id, code: sub.code, name: sub.name } };
+                };
+
+                const saveSubjectEdit = async () => {
+                    try {
+                        const data = editSubjectModal.value.data;
+                        await api.put(`/api/admin/subjects/${data.id}`, { code: data.code, name: data.name });
+                        editSubjectModal.value.show = false;
+                        await selectDept(selectedDept.value);
+                    } catch (e) {
+                        alert((e && e.detail) ? e.detail : 'Update failed.');
+                    }
                 };
 
                 const deleteSubject = async (id) => {
@@ -183,7 +251,7 @@
                 const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('role'); window.location.href = '/'; };
 
                 onMounted(loadDepts);
-                return { config, viewMode, departments, subjects, deptClasses, selectedDept, selectedClass, selectedSubjectIds, newSub, selectDept, selectClass, createSubject, deleteSubject, saveCurriculum, logout };
+                return { config, viewMode, departments, subjects, deptClasses, selectedDept, selectedClass, selectedSubjectIds, newSub, editSubjectModal, savingCurriculum, saveCurriculumStatus, selectDept, selectClass, createSubject, openEditSubject, saveSubjectEdit, deleteSubject, saveCurriculum, logout };
             }
         });
 

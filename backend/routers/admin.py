@@ -153,6 +153,27 @@ def create_subject(data: schemas.SubjectCreate, db: Session = Depends(get_db), a
     new_sub = models.Subject(**data.model_dump())
     db.add(new_sub); db.commit(); db.refresh(new_sub); return new_sub
 
+@router.put("/subjects/{id}", response_model=schemas.SubjectResponse)
+def update_subject(id: int, data: schemas.SubjectUpdate, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
+    sub = db.query(models.Subject).get(id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    payload = data.model_dump(exclude_unset=True)
+    if "name" in payload and payload["name"] is not None:
+        sub.name = payload["name"]
+    if "code" in payload and payload["code"] is not None:
+        sub.code = payload["code"].strip().upper()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Subject code already exists")
+
+    db.refresh(sub)
+    return sub
+
 @router.delete("/subjects/{id}")
 def delete_subject(id: int, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
     db.query(models.Subject).filter_by(id=id).delete()

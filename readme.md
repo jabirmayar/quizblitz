@@ -12,6 +12,22 @@ Students self-register under a department, semester, and class. Teachers create 
 
 ---
 
+## Screenshots
+
+| Admin | Faculty | Students |
+|---|---|---|
+| <img src="screenshots/admindashboard.png" width="260" alt="Admin dashboard" /> | <img src="screenshots/faculty.png" width="260" alt="Faculty management" /> | <img src="screenshots/studentdashboard.png" width="260" alt="Student dashboard" /> |
+
+| Structure | Subjects | Teacher |
+|---|---|---|
+| <img src="screenshots/department.png" width="260" alt="Departments and structure" /> | <img src="screenshots/subject.png" width="260" alt="Subject management" /> | <img src="screenshots/teacherdashboard.png" width="260" alt="Teacher dashboard" /> |
+
+| Assign Subjects |  |  |
+|---|---|---|
+| <img src="screenshots/assignsubject.png" width="260" alt="Assign subjects to class" /> |  |  |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |

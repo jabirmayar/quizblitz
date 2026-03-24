@@ -18,19 +18,19 @@ const NavbarComponent = {
                     <!-- Center: Navigation Links -->
                     <div class="flex items-center gap-8">
                         <template v-if="role === 'admin'">
-                            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
-                            <a href="/admin/departments" class="nav-link">Departments</a>
-                            <a href="/admin/subjects" class="nav-link">Subjects</a>
-                            <a href="/admin/teachers" class="nav-link">Teachers</a>
-                            <a href="/admin/students" class="nav-link">Students</a>
-                            <a href="/admin/results" class="nav-link">Results</a>
+                            <a href="/admin/dashboard" :class="['nav-link', isActive('/admin/dashboard') ? 'active' : '']">Dashboard</a>
+                            <a href="/admin/departments" :class="['nav-link', isActive('/admin/departments') ? 'active' : '']">Departments</a>
+                            <a href="/admin/subjects" :class="['nav-link', isActive('/admin/subjects') ? 'active' : '']">Subjects</a>
+                            <a href="/admin/teachers" :class="['nav-link', isActive('/admin/teachers') ? 'active' : '']">Teachers</a>
+                            <a href="/admin/students" :class="['nav-link', isActive('/admin/students') ? 'active' : '']">Students</a>
+                            <a href="/admin/results" :class="['nav-link', isActive('/admin/results') ? 'active' : '']">Results</a>
                         </template>
                         <template v-else-if="role === 'teacher'">
-                            <a href="/teacher/dashboard" class="nav-link">Dashboard</a>
-                            <a href="/teacher/quiz-create" class="nav-link">Create Quiz</a>
+                            <a href="/teacher/dashboard" :class="['nav-link', isActive('/teacher/dashboard') ? 'active' : '']">Dashboard</a>
+                            <a href="/teacher/quiz-create" :class="['nav-link', isActive('/teacher/quiz-create') ? 'active' : '']">Create Quiz</a>
                         </template>
                         <template v-else>
-                            <a href="/dashboard" class="nav-link">My Quizzes</a>
+                            <a href="/dashboard" :class="['nav-link', isActive('/dashboard') ? 'active' : '']">My Quizzes</a>
                         </template>
                     </div>
 
@@ -75,19 +75,19 @@ const NavbarComponent = {
 
                         <!-- Navigation Links -->
                         <template v-if="role === 'admin'">
-                            <a href="/admin/dashboard" @click="toggleMobileMenu" class="mobile-nav-link">Dashboard</a>
-                            <a href="/admin/departments" @click="toggleMobileMenu" class="mobile-nav-link">Departments</a>
-                            <a href="/admin/subjects" @click="toggleMobileMenu" class="mobile-nav-link">Subjects</a>
-                            <a href="/admin/teachers" @click="toggleMobileMenu" class="mobile-nav-link">Teachers</a>
-                            <a href="/admin/students" @click="toggleMobileMenu" class="mobile-nav-link">Students</a>
-                            <a href="/admin/results" @click="toggleMobileMenu" class="mobile-nav-link">Results</a>
+                            <a href="/admin/dashboard" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/admin/dashboard') ? 'active' : '']">Dashboard</a>
+                            <a href="/admin/departments" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/admin/departments') ? 'active' : '']">Departments</a>
+                            <a href="/admin/subjects" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/admin/subjects') ? 'active' : '']">Subjects</a>
+                            <a href="/admin/teachers" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/admin/teachers') ? 'active' : '']">Teachers</a>
+                            <a href="/admin/students" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/admin/students') ? 'active' : '']">Students</a>
+                            <a href="/admin/results" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/admin/results') ? 'active' : '']">Results</a>
                         </template>
                         <template v-else-if="role === 'teacher'">
-                            <a href="/teacher/dashboard" @click="toggleMobileMenu" class="mobile-nav-link">Dashboard</a>
-                            <a href="/teacher/quiz-create" @click="toggleMobileMenu" class="mobile-nav-link">Create Quiz</a>
+                            <a href="/teacher/dashboard" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/teacher/dashboard') ? 'active' : '']">Dashboard</a>
+                            <a href="/teacher/quiz-create" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/teacher/quiz-create') ? 'active' : '']">Create Quiz</a>
                         </template>
                         <template v-else>
-                            <a href="/dashboard" @click="toggleMobileMenu" class="mobile-nav-link">My Quizzes</a>
+                            <a href="/dashboard" @click="toggleMobileMenu" :class="['mobile-nav-link', isActive('/dashboard') ? 'active' : '']">My Quizzes</a>
                         </template>
 
                         <!-- User Info & Logout -->
@@ -106,6 +106,7 @@ const NavbarComponent = {
     `,
     setup() {
         const mobileMenuOpen = Vue.ref(false);
+        const currentPath = Vue.ref(window.location.pathname || '/');
         const getJwtPayload = (token) => {
             try {
                 if (!token) return null;
@@ -139,9 +140,26 @@ const NavbarComponent = {
             mobileMenuOpen.value = !mobileMenuOpen.value;
         };
 
+        const isActive = (href) => {
+            const path = currentPath.value || '/';
+
+            if (href === '/dashboard') {
+                return path === '/dashboard' || path.startsWith('/quiz') || path.startsWith('/result') || path.startsWith('/review');
+            }
+
+            if (href === '/teacher/dashboard') {
+                return path === '/teacher/dashboard'
+                    || path.startsWith('/teacher/questions')
+                    || path.startsWith('/teacher/quiz-edit')
+                    || path.startsWith('/teacher/results')
+                    || path.startsWith('/teacher/grade');
+            }
+
+            return path === href || path.startsWith(href + '/');
+        };
+
         const logout = () => {
             localStorage.removeItem('token');
-            localStorage.removeItem('role'); // legacy
             localStorage.removeItem('displayName');
             window.location.href = '/';
         };
@@ -152,6 +170,7 @@ const NavbarComponent = {
             config,
             roleLabel,
             toggleMobileMenu,
+            isActive,
             logout
         };
     }

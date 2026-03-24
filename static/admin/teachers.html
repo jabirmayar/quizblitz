@@ -61,7 +61,8 @@
                     </div>
 
                     <div class="admin-card !p-0 overflow-hidden shadow-2xl">
-                        <table class="w-full teacher-table text-sm text-left">
+                        <div class="overflow-x-auto">
+                        <table class="w-full min-w-[760px] teacher-table text-sm text-left">
                             <thead class="bg-black/20">
                                 <tr>
                                     <th>Instructor</th>
@@ -80,8 +81,8 @@
                                     </td>
                                     <td class="font-mono text-xs text-blue-500 uppercase">{{ t.registration_id }}</td>
                                     <td class="text-right">
-                                        <div class="flex justify-end items-center gap-4">
-                                            <button @click="openAssignModal(t)" class="text-[10px] font-bold text-zinc-400 hover:text-white uppercase tracking-widest transition">Assign Subjects</button>
+                                        <div class="flex justify-end items-center gap-3 flex-wrap">
+                                            <button @click="openAssignModal(t)" class="text-[10px] font-bold text-zinc-400 hover:text-white uppercase tracking-widest transition whitespace-nowrap">Assign Subjects</button>
                                             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                                 <button @click="openEditModal(t)" class="action-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></button>
                                                 <button @click="deleteTeacher(t)" class="action-icon del"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
@@ -91,6 +92,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
             </div>

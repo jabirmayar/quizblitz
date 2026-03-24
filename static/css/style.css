@@ -267,6 +267,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
     border-bottom-color: #ffffff; 
 }
 
+.nav-link.active {
+    color: #ffffff;
+    border-bottom-color: #ffffff;
+}
+
 .user-name-desktop {
     display: none;
 }
@@ -310,6 +315,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 .mobile-nav-link:hover { 
     color: #ffffff; 
     padding-left: 0.5rem; 
+}
+
+.mobile-nav-link.active {
+    color: #ffffff;
+    padding-left: 0.5rem;
 }
 
 /* Transitions */
@@ -370,3 +380,10 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert
 
 .btn-blue-outline { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
 .btn-blue-outline:hover { background: #3b82f6; color: white; }
+
+/* --- MOBILE UX: SHOW HOVER-ONLY ACTIONS --- */
+@media (hover: none), (pointer: coarse) {
+    [class*="opacity-0"][class*="group-hover:opacity-100"] {
+        opacity: 1 !important;
+    }
+}

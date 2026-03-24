@@ -209,7 +209,7 @@
     </div>
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, onMounted, onUnmounted } = Vue;
         const app = createApp({
             setup() {
                 const config = ref(CONFIG);
@@ -231,6 +231,11 @@
                         quizTitle.value = res.quiz.title;
                         sessions.value = res.sessions || [];
                     } catch (e) { console.error('Data sync failed'); }
+                };
+
+                const handlePageShow = () => { loadResults(); };
+                const handleVisibilityChange = () => {
+                    if (document.visibilityState === 'visible') loadResults();
                 };
 
                 const showCheatEvents = (session) => {
@@ -371,7 +376,20 @@
                     const rows = buildExportRows();
                     if (!rows.length) return;
 
-                    const baseName = `results_${quizId.value || 'quiz'}`;
+                    const sanitizeFilename = (name) => {
+                        return (name || 'export')
+                            .toString()
+                            .replace(/[\\/:*?"<>|]+/g, '_')
+                            .replace(/\s+/g, '_')
+                            .replace(/_+/g, '_')
+                            .replace(/^_+|_+$/g, '')
+                            .slice(0, 120);
+                    };
+
+                    const todayStamp = () => new Date().toISOString().slice(0, 10);
+                    const appName = (config.value && config.value.APP_NAME) ? config.value.APP_NAME : 'QuizBlitz';
+                    const titlePart = sanitizeFilename((quizTitle.value || '').slice(0, 60));
+                    const baseName = sanitizeFilename(`${appName}_results_quiz-${quizId.value || 'quiz'}${titlePart ? '_' + titlePart : ''}_${todayStamp()}`);
 
                     if (format === 'json') {
                         downloadTextFile(`${baseName}.json`, 'application/json', JSON.stringify(rows, null, 2), true);
@@ -445,7 +463,16 @@
 
                 const clearOverride = (session) => openOverrideModal('clear', session);
 
-                onMounted(loadResults);
+                onMounted(() => {
+                    loadResults();
+                    window.addEventListener('pageshow', handlePageShow);
+                    document.addEventListener('visibilitychange', handleVisibilityChange);
+                });
+
+                onUnmounted(() => {
+                    window.removeEventListener('pageshow', handlePageShow);
+                    document.removeEventListener('visibilitychange', handleVisibilityChange);
+                });
                 return {
                     config, quizTitle, sessions,
                     showModal, selectedSession, showCheatEvents, closeModal,

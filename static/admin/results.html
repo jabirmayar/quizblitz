@@ -56,7 +56,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Class Unit</label>
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 block">Class</label>
                         <select v-model="filters.classId" :disabled="!filters.semId" class="input-field text-sm cursor-pointer disabled:opacity-30">
                             <option :value="null">All Classes</option>
                             <option v-for="c in classes" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -78,7 +78,7 @@
                 </div>
                 
                 <div v-else-if="results.length === 0" class="py-20 text-center">
-                    <p class="text-zinc-600 italic text-sm">No exam records found for the selected criteria.</p>
+                    <p class="text-zinc-600 italic text-sm">No quizzes records found for the selected criteria.</p>
                 </div>
 
                 <table v-else class="w-full results-table text-sm">
@@ -353,7 +353,33 @@
                     const rows = buildExportRows();
                     if (!rows.length) return;
 
-                    const baseName = `analytics_export_${new Date().toISOString().split('T')[0]}`;
+                    const sanitizeFilename = (name) => {
+                        return (name || 'export')
+                            .toString()
+                            .replace(/[\\/:*?"<>|]+/g, '_')
+                            .replace(/\s+/g, '_')
+                            .replace(/_+/g, '_')
+                            .replace(/^_+|_+$/g, '')
+                            .slice(0, 140);
+                    };
+
+                    const todayStamp = () => new Date().toISOString().slice(0, 10);
+                    const appName = (config.value && config.value.APP_NAME) ? config.value.APP_NAME : 'QuizBlitz';
+
+                    const deptObj = filters.value?.deptId ? (departments.value || []).find(d => d.id === filters.value.deptId) : null;
+                    const semObj = filters.value?.semId ? (semesters.value || []).find(s => s.id === filters.value.semId) : null;
+                    const classObj = filters.value?.classId ? (classes.value || []).find(c => c.id === filters.value.classId) : null;
+
+                    const deptPart = filters.value?.deptId
+                        ? sanitizeFilename(deptObj?.name ? `dept_${deptObj.name}` : `dept_${filters.value.deptId}`)
+                        : 'all_depts';
+                    const semPart = filters.value?.semId
+                        ? sanitizeFilename(semObj?.code ? `sem_${semObj.code}` : `sem_${filters.value.semId}`)
+                        : 'all_sems';
+                    const classPart = filters.value?.classId
+                        ? (classObj?.name ? `class_${classObj.name}` : `class_${filters.value.classId}`)
+                        : 'all_classes';
+                    const baseName = sanitizeFilename(`${appName}_admin_results_${deptPart}_${semPart}_${classPart}_${todayStamp()}`);
 
                     if (format === 'json') {
                         downloadTextFile(`${baseName}.json`, 'application/json', JSON.stringify(rows, null, 2), true);

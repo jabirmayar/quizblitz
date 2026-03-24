@@ -127,6 +127,10 @@ class SubjectCreate(BaseModel):
     code: str
     department_id: int
 
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+
 class SubjectResponse(BaseModel):
     id: int
     name: str

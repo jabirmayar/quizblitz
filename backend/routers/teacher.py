@@ -128,6 +128,65 @@ def add_question(quiz_id: int, question: schemas.QuestionCreate, db: Session = D
     db.refresh(new_question)
     return new_question
 
+@router.post("/quizzes/{quiz_id}/questions/bulk")
+def bulk_add_questions(quiz_id: int, questions: List[schemas.QuestionCreate], db: Session = Depends(get_db), teacher: models.User = Depends(auth.get_current_teacher)):
+    quiz = db.query(models.Quiz).filter(models.Quiz.id == quiz_id, models.Quiz.created_by == teacher.id).first()
+    if not quiz:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not questions:
+        raise HTTPException(status_code=400, detail="No questions provided")
+
+    max_order = db.query(models.func.max(models.Question.order_index)).filter_by(quiz_id=quiz_id).scalar()
+    start_order = int(max_order or 0) + 1
+
+    new_rows: list[models.Question] = []
+    for idx, q in enumerate(questions, start=1):
+        q_type = (q.type or "").strip().lower()
+        body = (q.body or "").strip()
+        if not body:
+            raise HTTPException(status_code=400, detail=f"Row {idx}: body is required")
+
+        points = int(q.points or 1)
+        if points <= 0:
+            raise HTTPException(status_code=400, detail=f"Row {idx}: points must be > 0")
+
+        options = q.options
+        correct_answer = q.correct_answer
+
+        if q_type == "mcq":
+            clean_options = [(o or "").strip() for o in (options or [])]
+            clean_options = [o for o in clean_options if o]
+            if len(clean_options) < 2:
+                raise HTTPException(status_code=400, detail=f"Row {idx}: MCQ requires at least 2 options")
+            if not (correct_answer or "").strip():
+                raise HTTPException(status_code=400, detail=f"Row {idx}: MCQ correct_answer is required")
+            correct_answer = correct_answer.strip()
+            if correct_answer not in clean_options:
+                raise HTTPException(status_code=400, detail=f"Row {idx}: correct_answer must match one of the options")
+            options = clean_options
+
+        elif q_type == "qa":
+            options = None
+            correct_answer = None
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Row {idx}: invalid type '{q.type}' (use mcq or qa)")
+
+        new_rows.append(models.Question(
+            quiz_id=quiz_id,
+            body=body,
+            type=q_type,
+            options=options,
+            correct_answer=correct_answer,
+            points=points,
+            order_index=start_order + idx - 1
+        ))
+
+    db.add_all(new_rows)
+    db.commit()
+    return {"status": "ok", "added": len(new_rows)}
+
 # ==========================================
 # ASSIGNMENTS
 # ==========================================
