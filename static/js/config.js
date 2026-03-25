@@ -1,7 +1,7 @@
 const CONFIG = {
     APP_NAME: "QuizBlitz",
     BRAND_COLOR: "#ffffff",
-    VERSION: "v0.0.4",
+    VERSION: "v0.0.5",
     COPYRIGHT: "Daacreators",
     FOOTER_TEXT: "QuizBlitz Inc."
 };

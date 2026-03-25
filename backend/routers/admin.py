@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -300,11 +301,12 @@ def get_class_subjects_detailed(class_id: int, db: Session = Depends(get_db), ad
 
 @router.post("/teachers", response_model=schemas.UserResponse)
 def provision_teacher(t: schemas.TeacherCreate, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
-    existing = db.query(models.User).filter(models.User.registration_id == t.registration_id).first()
+    reg_id = auth.normalize_registration_id(t.registration_id)
+    existing = db.query(models.User).filter(func.lower(models.User.registration_id) == reg_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="Registration ID already exists")
 
-    new_t = models.User(registration_id=t.registration_id, display_name=t.display_name, password_hash=auth.get_password_hash(t.password), role="teacher", is_active=True)
+    new_t = models.User(registration_id=reg_id, display_name=t.display_name, password_hash=auth.get_password_hash(t.password), role="teacher", is_active=True)
     db.add(new_t)
     try:
         db.commit()
@@ -325,8 +327,8 @@ def update_teacher(teacher_id: int, update: schemas.TeacherUpdate, db: Session =
         teacher.display_name = data["display_name"]
 
     if "registration_id" in data and data["registration_id"] is not None:
-        reg_id = data["registration_id"]
-        existing = db.query(models.User).filter(models.User.registration_id == reg_id, models.User.id != teacher.id).first()
+        reg_id = auth.normalize_registration_id(data["registration_id"])
+        existing = db.query(models.User).filter(func.lower(models.User.registration_id) == reg_id, models.User.id != teacher.id).first()
         if existing:
             raise HTTPException(status_code=400, detail="Registration ID already exists")
         teacher.registration_id = reg_id

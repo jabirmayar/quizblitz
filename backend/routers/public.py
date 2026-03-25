@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 from collections import deque
@@ -18,7 +19,8 @@ _REGISTER_MAX_ATTEMPTS_PER_WINDOW = 10
 
 @router.post("/auth/login", response_model=schemas.Token)
 def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.registration_id == payload.username).first()
+    username = auth.normalize_registration_id(payload.username)
+    user = db.query(models.User).filter(func.lower(models.User.registration_id) == username).first()
     if not user or not auth.verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -54,12 +56,13 @@ def register_student(user: schemas.UserCreate, request: Request, db: Session = D
                 raise HTTPException(status_code=400, detail="Please try again.")
 
     # 1. Check if ID exists
-    if db.query(models.User).filter_by(registration_id=user.registration_id).first():
+    reg_id = auth.normalize_registration_id(user.registration_id)
+    if db.query(models.User).filter(func.lower(models.User.registration_id) == reg_id).first():
         raise HTTPException(status_code=400, detail="Registration ID already registered")
 
     # 2. Create Student
     new_user = models.User(
-        registration_id=user.registration_id,
+        registration_id=reg_id,
         display_name=user.display_name,
         password_hash=auth.get_password_hash(user.password),
         role="student",

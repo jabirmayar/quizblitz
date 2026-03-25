@@ -3,6 +3,9 @@ from typing import Optional, List
 from datetime import datetime
 import re
 
+def _normalize_registration_id(v: str) -> str:
+    return (v or "").strip().lower()
+
 # --- Auth & Tokens ---
 class Token(BaseModel):
     access_token: str
@@ -17,6 +20,11 @@ class TokenData(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, v: str):
+        return _normalize_registration_id(v)
 
 class ChangePassword(BaseModel):
     old_password: str
@@ -43,6 +51,7 @@ class UserCreate(BaseModel):
     @field_validator('registration_id')
     @classmethod
     def validate_reg_id(cls, v):
+        v = _normalize_registration_id(v)
         if len(v) < 8:
             raise ValueError('Registration ID must be at least 8 characters')
         if not re.match(r'^[A-Za-z0-9_-]+$', v):
@@ -171,11 +180,33 @@ class TeacherCreate(BaseModel):
     display_name: str
     password: str
 
+    @field_validator("registration_id")
+    @classmethod
+    def validate_teacher_reg_id(cls, v: str):
+        v = _normalize_registration_id(v)
+        if len(v) < 3:
+            raise ValueError("Registration ID must be at least 3 characters")
+        if not re.match(r'^[A-Za-z0-9_-]+$', v):
+            raise ValueError('Invalid registration ID format. Use letters, numbers, -, or _')
+        return v
+
 class TeacherUpdate(BaseModel):
     registration_id: Optional[str] = None
     display_name: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator("registration_id")
+    @classmethod
+    def normalize_teacher_reg_id(cls, v: Optional[str]):
+        if v is None:
+            return None
+        v = _normalize_registration_id(v)
+        if len(v) < 3:
+            raise ValueError("Registration ID must be at least 3 characters")
+        if not re.match(r'^[A-Za-z0-9_-]+$', v):
+            raise ValueError('Invalid registration ID format. Use letters, numbers, -, or _')
+        return v
 
 class TeacherClassAssign(BaseModel):
     teacher_id: int
