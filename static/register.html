@@ -65,10 +65,12 @@
             <form @submit.prevent="handleRegister" class="space-y-4">
                 <input v-model="form.display_name" type="text" placeholder="Full Name" class="input-field text-sm" required :disabled="loading">
                 <input
-                    v-model="form.registration_id"
+                    :value="form.registration_id"
+                    @beforeinput="onRegIdBeforeInput"
                     @input="onRegIdInput"
                     @keydown.space.prevent
                     @paste="onRegIdPaste"
+                    @compositionend="onRegIdInput"
                     type="text"
                     minlength="8"
                     placeholder="Registration ID (AWKUM-123456789)"
@@ -186,7 +188,8 @@
                  const handleRegister = async () => {
                      if (!form.value.classId) { alert("Please select your class group"); return; }
                      loading.value = true;
-                    try {
+                     try {
+                        form.value.registration_id = sanitizeRegId(form.value.registration_id);
                         await api.post('/api/auth/register', { 
                             display_name: form.value.display_name,
                             registration_id: form.value.registration_id,
@@ -206,7 +209,15 @@
                     }
                  };
 
-                 const sanitizeRegId = (v) => String(v || '').replace(/\\s+/g, '');
+                 const sanitizeRegId = (v) => String(v || '').replace(/[^A-Za-z0-9_-]+/g, '');
+                 const isAllowedChunk = (chunk) => /^[A-Za-z0-9_-]+$/.test(String(chunk || ''));
+
+                 const onRegIdBeforeInput = (e) => {
+                     if (!e) return;
+                     const data = e.data;
+                     if (typeof data !== 'string' || data === '') return;
+                     if (!isAllowedChunk(data)) e.preventDefault();
+                 };
 
                  const onRegIdInput = (e) => {
                      const cleaned = sanitizeRegId(e && e.target ? e.target.value : form.value.registration_id);
@@ -226,7 +237,7 @@
                  };
  
                  onMounted(fetchDepts);
-                 return { config, loading, depts, progs, sems, classes, showPassword, form, onDeptChange, onProgramChange, onSessionChange, handleRegister, onRegIdInput, onRegIdPaste };
+                 return { config, loading, depts, progs, sems, classes, showPassword, form, onDeptChange, onProgramChange, onSessionChange, handleRegister, onRegIdBeforeInput, onRegIdInput, onRegIdPaste };
              }
          }).mount('#app');
      </script>

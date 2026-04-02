@@ -132,6 +132,10 @@
                                 <span v-else class="text-zinc-700 font-mono text-[10px]">VERIFIED</span>
                             </td>
                             <td class="text-right">
+                                <a :href="'/teacher/session?session_id=' + r.id"
+                                   class="text-[10px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest transition mr-3">
+                                    View
+                                </a>
                                 <button v-if="!r.is_score_overridden"
                                         @click="overrideZero(r)"
                                         class="text-[10px] font-bold text-white bg-rose-600/80 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-rose-600 transition">
@@ -622,7 +626,9 @@
 
                 const formatTimestamp = (timestamp) => {
                     if (!timestamp) return '';
-                    const date = new Date(timestamp);
+                    let s = String(timestamp).trim().replace(' ', 'T');
+                    if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(s)) s = `${s}Z`; // treat naive DB strings as UTC
+                    const date = new Date(s);
                     return date.toLocaleString();
                 };
 

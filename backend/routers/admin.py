@@ -19,6 +19,12 @@ def normalize_pagination(page: int = 1, page_size: int = 50, max_page_size: int 
     offset = (safe_page - 1) * safe_page_size
     return safe_page, safe_page_size, offset
 
+def to_utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    # DB stores naive UTC; annotate as UTC for clients.
+    return dt.replace(tzinfo=timezone.utc).isoformat()
+
 # ==========================================
 # 1. DEPARTMENTS
 # ==========================================
@@ -497,7 +503,7 @@ def list_students_paged(
         "registration_id": r.registration_id,
         "display_name": r.display_name,
         "is_active": r.is_active,
-        "created_at": r.created_at,
+        "created_at": to_utc_iso(r.created_at),
         "class_id": r.class_id,
         "class_name": r.class_name or "Unassigned",
     } for r in rows]
@@ -655,10 +661,10 @@ def get_global_results_paged(
             "cheat_events": [{
                 "id": e.id,
                 "event_type": e.event_type,
-                "occurred_at": e.occurred_at.isoformat() if e.occurred_at else None,
+                "occurred_at": to_utc_iso(e.occurred_at),
                 "detail": e.detail
             } for e in events],
-            "submitted_at": s.submitted_at,
+            "submitted_at": to_utc_iso(s.submitted_at),
             "pass_percentage": float(r.pass_percentage or 0),
             "percentage_score": round(percentage_score, 1),
             "is_passed": is_passed

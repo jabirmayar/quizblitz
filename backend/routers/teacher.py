@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import List
@@ -16,6 +17,11 @@ def normalize_pagination(page: int = 1, page_size: int = 50, max_page_size: int 
     safe_page_size = max(1, min(int(page_size or 50), int(max_page_size)))
     offset = (safe_page - 1) * safe_page_size
     return safe_page, safe_page_size, offset
+
+def to_utc_iso(dt):
+    if not dt:
+        return None
+    return dt.replace(tzinfo=timezone.utc).isoformat()
 
 def ensure_questions_mutable(quiz_id: int, db: Session):
     """
@@ -360,7 +366,7 @@ def get_quiz_results_paged(
             "cheat_events": [{
                 "id": e.id,
                 "event_type": e.event_type,
-                "occurred_at": e.occurred_at.isoformat() if e.occurred_at else None,
+                "occurred_at": to_utc_iso(e.occurred_at),
                 "detail": e.detail
             } for e in events],
             "pass_percentage": float(quiz.pass_percentage or 0),
@@ -423,6 +429,114 @@ def get_session_grading_paged(
     } for ans, q in rows]
 
     return {"items": items, "total": total, "page": safe_page, "page_size": safe_page_size}
+
+@router.get("/sessions/{session_id}/detail")
+def get_session_detail(
+    session_id: int,
+    db: Session = Depends(get_db),
+    teacher: models.User = Depends(auth.get_current_teacher)
+):
+    session = db.query(models.QuizSession).get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    quiz = db.query(models.Quiz).get(session.quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    if teacher.role != "admin" and quiz.created_by != teacher.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    student = db.query(models.User).get(session.user_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    total_points_raw = db.query(models.Question).filter_by(quiz_id=quiz.id).with_entities(func.sum(models.Question.points)).scalar()
+    total_points = float(total_points_raw or 0)
+
+    effective_score = float(session.score_override if session.score_override is not None else (session.score or 0))
+    percentage_score = (effective_score / total_points * 100) if total_points > 0 else 0
+    is_passed = percentage_score >= float(quiz.pass_percentage or 0)
+
+    # Questions in the session order when available (otherwise default order_index then id)
+    questions = []
+    if session.question_order:
+        q_ids = list(session.question_order)
+        rows = db.query(models.Question).filter(models.Question.id.in_(q_ids)).all()
+        by_id = {q.id: q for q in rows}
+        for qid in q_ids:
+            q = by_id.get(qid)
+            if q:
+                questions.append(q)
+    else:
+        questions = db.query(models.Question)\
+            .filter_by(quiz_id=quiz.id)\
+            .order_by(models.Question.order_index.asc(), models.Question.id.asc())\
+            .all()
+
+    answers = db.query(models.Answer).filter_by(session_id=session.id).all()
+    ans_map = {a.question_id: a for a in answers}
+
+    cheat_events = db.query(models.CheatEvent).filter_by(session_id=session.id).order_by(models.CheatEvent.occurred_at).all()
+    computed_flag_count = len(cheat_events)
+    if session.cheat_flag_count != computed_flag_count:
+        session.cheat_flag_count = computed_flag_count
+        db.commit()
+
+    return {
+        "quiz": {
+            "id": quiz.id,
+            "title": quiz.title,
+            "pass_percentage": float(quiz.pass_percentage or 0),
+            "total_points": total_points
+        },
+        "student": {
+            "id": student.id,
+            "display_name": student.display_name,
+            "registration_id": student.registration_id
+        },
+        "session": {
+            "id": session.id,
+            "attempt_number": session.attempt_number,
+            "status": session.status,
+            "started_at": to_utc_iso(session.started_at),
+            "expires_at": to_utc_iso(session.expires_at),
+            "submitted_at": to_utc_iso(session.submitted_at),
+            "result_released": session.result_released,
+            "score": session.score,
+            "effective_score": effective_score,
+            "percentage_score": round(percentage_score, 1),
+            "is_passed": is_passed,
+            "is_score_overridden": session.score_override is not None,
+            "score_override_reason": session.score_override_reason,
+            "score_override": session.score_override
+        },
+        "questions": [{
+            "id": q.id,
+            "body": q.body,
+            "type": q.type,
+            "options": q.options,
+            "correct_answer": q.correct_answer,
+            "points": q.points
+        } for q in questions],
+        "answers": {
+            str(qid): {
+                "answer_value": (ans_map[qid].answer_value if qid in ans_map else None),
+                "answered_at": (to_utc_iso(ans_map[qid].answered_at) if qid in ans_map else None),
+                "is_correct": (ans_map[qid].is_correct if qid in ans_map else None),
+                "marks_awarded": (ans_map[qid].marks_awarded if qid in ans_map else None),
+                "graded_at": (to_utc_iso(ans_map[qid].graded_at) if qid in ans_map else None),
+                "is_overridden": (ans_map[qid].is_overridden if qid in ans_map else False)
+            } for qid in [q.id for q in questions]
+        },
+        "cheat_flag_count": computed_flag_count,
+        "cheat_events": [{
+            "id": e.id,
+            "event_type": e.event_type,
+            "occurred_at": to_utc_iso(e.occurred_at),
+            "detail": e.detail
+        } for e in cheat_events]
+    }
 
 @router.post("/answers/{answer_id}/grade")
 def submit_grade(answer_id: int, grade: schemas.GradeSubmit, db: Session = Depends(get_db), teacher: models.User = Depends(auth.get_current_teacher)):

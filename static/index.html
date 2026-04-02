@@ -76,10 +76,12 @@
                             Registration ID
                         </label>
                         <input 
-                            v-model="form.username" 
+                            :value="form.username"
+                            @beforeinput="onUsernameBeforeInput"
                             @input="onUsernameInput"
                             @keydown.space.prevent
                             @paste="onUsernamePaste"
+                            @compositionend="onUsernameInput"
                             type="text" 
                             placeholder="AWKUM-123456789" 
                             class="input-field text-sm placeholder:text-neutral-800" 
@@ -169,10 +171,11 @@
                      loading.value = true;
                      notification.value.show = false;
                      try {
-                        const res = await api.post('/api/auth/login', form.value);
-                        
-                        localStorage.setItem('token', res.access_token);
-                        localStorage.setItem('displayName', res.display_name);
+                        form.value.username = sanitizeUsername(form.value.username);
+                         const res = await api.post('/api/auth/login', form.value);
+                         
+                         localStorage.setItem('token', res.access_token);
+                         localStorage.setItem('displayName', res.display_name);
                         
                         if (res.role === 'admin') window.location.href = '/admin/dashboard';
                         else if (res.role === 'teacher') window.location.href = '/teacher/dashboard';
@@ -185,7 +188,16 @@
                      }
                  };
 
-                 const sanitizeUsername = (v) => String(v || '').replace(/\\s+/g, '');
+                 const sanitizeUsername = (v) => String(v || '').replace(/[^A-Za-z0-9_-]+/g, '');
+                 const isAllowedChunk = (chunk) => /^[A-Za-z0-9_-]+$/.test(String(chunk || ''));
+
+                 const onUsernameBeforeInput = (e) => {
+                     // Mobile keyboards often emit whitespace via beforeinput; block it at the source.
+                     if (!e) return;
+                     const data = e.data;
+                     if (typeof data !== 'string' || data === '') return;
+                     if (!isAllowedChunk(data)) e.preventDefault();
+                 };
 
                  const onUsernameInput = (e) => {
                      const cleaned = sanitizeUsername(e && e.target ? e.target.value : form.value.username);
@@ -204,7 +216,7 @@
                      }
                  };
  
-                return { config, form, loading, showPassword, notification, handleLogin, currentYear, onUsernameInput, onUsernamePaste };
+                return { config, form, loading, showPassword, notification, handleLogin, currentYear, onUsernameBeforeInput, onUsernameInput, onUsernamePaste };
              }
          }).mount('#app');
     </script>
