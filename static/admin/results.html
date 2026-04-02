@@ -81,7 +81,8 @@
                     <p class="text-zinc-600 italic text-sm">No quizzes records found for the selected criteria.</p>
                 </div>
 
-                <table v-else class="w-full results-table text-sm">
+                <div v-else class="overflow-x-auto">
+                <table class="w-full min-w-[840px] results-table text-sm">
                     <thead class="bg-black/20">
                         <tr>
                             <th class="text-left">Student Profile</th>
@@ -145,6 +146,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </main>
 

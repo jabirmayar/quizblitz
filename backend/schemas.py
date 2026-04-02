@@ -24,7 +24,13 @@ class UserLogin(BaseModel):
     @field_validator("username")
     @classmethod
     def normalize_username(cls, v: str):
-        return _normalize_registration_id(v)
+        v = _normalize_registration_id(v)
+        if not v:
+            raise ValueError("Registration ID is required")
+        # Disallow whitespace and other symbols to match registration_id rules
+        if not re.match(r'^[A-Za-z0-9_-]+$', v):
+            raise ValueError("Invalid registration ID format. Use letters, numbers, -, or _")
+        return v
 
 class ChangePassword(BaseModel):
     old_password: str

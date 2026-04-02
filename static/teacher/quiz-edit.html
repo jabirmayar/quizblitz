@@ -178,7 +178,6 @@
                         };
 
                         await api.put(`/api/teacher/quizzes/${quizId.value}`, payload);
-                        alert("Quiz updated successfully.");
                         window.location.href = '/teacher/dashboard';
                     } catch (e) { 
                         alert('Update failed: ' + JSON.stringify(e.detail)); 

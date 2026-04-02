@@ -1,6 +1,40 @@
 const api = {
     baseUrl: '',
 
+    normalizeError(err) {
+        // FastAPI errors can be: {detail: "msg"} or {detail: [{loc,msg,type}, ...]}
+        try {
+            if (!err) return { detail: 'Request failed' };
+            if (typeof err === 'string') return { detail: err };
+
+            if (err.detail) {
+                if (typeof err.detail === 'string') return err;
+
+                if (Array.isArray(err.detail)) {
+                    const msgs = err.detail.map((item) => {
+                        if (!item) return null;
+                        if (typeof item === 'string') return item;
+                        const loc = Array.isArray(item.loc) ? item.loc.slice(1).join('.') : '';
+                        const msg = item.msg || item.message || null;
+                        if (loc && msg) return `${loc}: ${msg}`;
+                        return msg || JSON.stringify(item);
+                    }).filter(Boolean);
+                    return { ...err, detail: msgs.join('\n') };
+                }
+
+                if (typeof err.detail === 'object') {
+                    const msg = err.detail.msg || err.detail.message;
+                    return { ...err, detail: msg ? String(msg) : JSON.stringify(err.detail) };
+                }
+            }
+
+            if (err.message && typeof err.message === 'string') return { detail: err.message };
+            return { detail: JSON.stringify(err) };
+        } catch (_) {
+            return { detail: 'Request failed' };
+        }
+    },
+
     getJwtPayload(token) {
         try {
             if (!token) return null;
@@ -45,8 +79,9 @@ const api = {
         }
 
         if (!response.ok) {
-            const error = await response.json();
-            throw error;
+            let error = null;
+            try { error = await response.json(); } catch (_) { error = { detail: `Request failed (${response.status})` }; }
+            throw this.normalizeError(error);
         }
 
         return response.json();

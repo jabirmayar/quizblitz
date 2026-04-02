@@ -11,6 +11,20 @@ router = APIRouter(prefix="/teacher", tags=["Teacher"])
 def get_utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+def ensure_questions_mutable(quiz_id: int, db: Session):
+    """
+    Prevent quiz question edits once any student has started an attempt.
+
+    Otherwise, existing sessions can end up with `question_order` IDs that no
+    longer exist, causing students to see fewer questions (and an early Submit).
+    """
+    has_any_session = db.query(models.QuizSession.id).filter(models.QuizSession.quiz_id == quiz_id).first()
+    if has_any_session:
+        raise HTTPException(
+            status_code=409,
+            detail="Quiz questions cannot be modified after students have started attempts"
+        )
+
 # ==========================================
 # ASSIGNMENTS
 # ==========================================
@@ -122,6 +136,8 @@ def add_question(quiz_id: int, question: schemas.QuestionCreate, db: Session = D
     if not quiz:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    ensure_questions_mutable(quiz_id, db)
+
     new_question = models.Question(quiz_id=quiz_id, **question.model_dump())
     db.add(new_question)
     db.commit()
@@ -133,6 +149,8 @@ def bulk_add_questions(quiz_id: int, questions: List[schemas.QuestionCreate], db
     quiz = db.query(models.Quiz).filter(models.Quiz.id == quiz_id, models.Quiz.created_by == teacher.id).first()
     if not quiz:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    ensure_questions_mutable(quiz_id, db)
 
     if not questions:
         raise HTTPException(status_code=400, detail="No questions provided")
@@ -391,6 +409,7 @@ def delete_quiz(quiz_id: int, db: Session = Depends(get_db), teacher: models.Use
     db_quiz = db.query(models.Quiz).filter(models.Quiz.id == quiz_id, models.Quiz.created_by == teacher.id).first()
     if not db_quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
+    ensure_questions_mutable(quiz_id, db)
     db.delete(db_quiz)
     db.commit()
     return {"message": "Quiz deleted"}
@@ -398,8 +417,14 @@ def delete_quiz(quiz_id: int, db: Session = Depends(get_db), teacher: models.Use
 @router.put("/questions/{question_id}", response_model=schemas.QuestionResponse)
 def update_question(question_id: int, q_update: schemas.QuestionCreate, db: Session = Depends(get_db), teacher: models.User = Depends(auth.get_current_teacher)):
     db_q = db.query(models.Question).get(question_id)
+    if not db_q:
+        raise HTTPException(status_code=404, detail="Question not found")
+
     quiz = db.query(models.Quiz).filter(models.Quiz.id == db_q.quiz_id, models.Quiz.created_by == teacher.id).first()
-    if not quiz: raise HTTPException(status_code=403)
+    if not quiz:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    ensure_questions_mutable(db_q.quiz_id, db)
 
     for key, value in q_update.model_dump().items():
         setattr(db_q, key, value)
@@ -411,6 +436,14 @@ def update_question(question_id: int, q_update: schemas.QuestionCreate, db: Sess
 @router.delete("/questions/{question_id}")
 def delete_question(question_id: int, db: Session = Depends(get_db), teacher: models.User = Depends(auth.get_current_teacher)):
     db_q = db.query(models.Question).get(question_id)
+    if not db_q:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    quiz = db.query(models.Quiz).filter(models.Quiz.id == db_q.quiz_id, models.Quiz.created_by == teacher.id).first()
+    if not quiz:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    ensure_questions_mutable(db_q.quiz_id, db)
     db.delete(db_q)
     db.commit()
     return {"message": "Question deleted"}

@@ -64,7 +64,20 @@
 
             <form @submit.prevent="handleRegister" class="space-y-4">
                 <input v-model="form.display_name" type="text" placeholder="Full Name" class="input-field text-sm" required :disabled="loading">
-                <input v-model="form.registration_id" type="text" minlength="8" placeholder="Registration ID (AWKUM-123456789)" class="input-field text-sm font-mono" required :disabled="loading">
+                <input
+                    v-model="form.registration_id"
+                    @input="onRegIdInput"
+                    @keydown.space.prevent
+                    @paste="onRegIdPaste"
+                    type="text"
+                    minlength="8"
+                    placeholder="Registration ID (AWKUM-123456789)"
+                    class="input-field text-sm font-mono"
+                    pattern="[A-Za-z0-9_-]+"
+                    title="Use letters, numbers, -, or _. No spaces."
+                    required
+                    :disabled="loading"
+                >
 
                 <!-- Honeypot field (spam bots often fill this). Must stay empty. -->
                 <div style="position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden;">
@@ -169,10 +182,10 @@
                         classes.value = await api.get(`/api/semesters/${form.value.semId}/classes?program_id=${form.value.progId}`) || [];
                     } else { classes.value = []; }
                 };
-
-                const handleRegister = async () => {
-                    if (!form.value.classId) { alert("Please select your class group"); return; }
-                    loading.value = true;
+                
+                 const handleRegister = async () => {
+                     if (!form.value.classId) { alert("Please select your class group"); return; }
+                     loading.value = true;
                     try {
                         await api.post('/api/auth/register', { 
                             display_name: form.value.display_name,
@@ -191,12 +204,31 @@
                         alert(e.detail || 'Registration failed. That ID may already be in use.'); 
                         loading.value = false; 
                     }
-                };
+                 };
 
-                onMounted(fetchDepts);
-                return { config, loading, depts, progs, sems, classes, showPassword, form, onDeptChange, onProgramChange, onSessionChange, handleRegister };
-            }
-        }).mount('#app');
-    </script>
+                 const sanitizeRegId = (v) => String(v || '').replace(/\\s+/g, '');
+
+                 const onRegIdInput = (e) => {
+                     const cleaned = sanitizeRegId(e && e.target ? e.target.value : form.value.registration_id);
+                     if (e && e.target && e.target.value !== cleaned) e.target.value = cleaned;
+                     form.value.registration_id = cleaned;
+                 };
+
+                 const onRegIdPaste = (e) => {
+                     try {
+                         const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+                         const cleaned = sanitizeRegId(text);
+                         e.preventDefault();
+                         form.value.registration_id = sanitizeRegId((form.value.registration_id || '') + cleaned);
+                     } catch (_) {
+                         // allow default paste if clipboard access fails; input handler will sanitize
+                     }
+                 };
+ 
+                 onMounted(fetchDepts);
+                 return { config, loading, depts, progs, sems, classes, showPassword, form, onDeptChange, onProgramChange, onSessionChange, handleRegister, onRegIdInput, onRegIdPaste };
+             }
+         }).mount('#app');
+     </script>
 </body>
 </html>

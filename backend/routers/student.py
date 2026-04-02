@@ -14,6 +14,52 @@ def get_utc_now():
     # Standard UTC time for database consistency
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+def finalize_session(session: models.QuizSession, db: Session) -> models.QuizSession:
+    """
+    Finalize (submit) a quiz session using answers saved so far.
+
+    - Computes MCQ scoring deterministically from stored answers.
+    - Marks session done + sets submitted_at.
+    - Releases results instantly only when there are no QA questions.
+
+    This is intentionally server-time driven and idempotent.
+    """
+    quiz = db.query(models.Quiz).filter_by(id=session.quiz_id).first()
+    if not quiz:
+        session.status = "done"
+        if not session.submitted_at:
+            session.submitted_at = get_utc_now()
+        db.commit()
+        return session
+
+    questions = db.query(models.Question).filter_by(quiz_id=session.quiz_id).all()
+    answers = db.query(models.Answer).filter_by(session_id=session.id).all()
+    ans_map = {a.question_id: a for a in answers}
+
+    score = 0.0
+    has_qa = False
+
+    for q in questions:
+        ans = ans_map.get(q.id)
+        if q.type == "mcq":
+            if ans:
+                is_correct = (ans.answer_value == q.correct_answer)
+                ans.is_correct = is_correct
+                ans.marks_awarded = q.points if is_correct else 0
+                ans.graded_at = get_utc_now()
+                score += float(ans.marks_awarded or 0)
+        else:
+            has_qa = True
+
+    session.status = "done"
+    if not session.submitted_at:
+        session.submitted_at = get_utc_now()
+    session.score = score
+    session.result_released = not has_qa
+
+    db.commit()
+    return session
+
 # ==========================================
 # VIEW & START QUIZZES
 # ==========================================
@@ -83,6 +129,19 @@ def start_quiz(quiz_id: int, db: Session = Depends(get_db), student: models.User
         raise HTTPException(status_code=404, detail="Quiz not found or not published")
 
     now = get_utc_now()
+
+    # If the student already has an active session for this quiz, resume it instead of creating a new one.
+    existing = db.query(models.QuizSession).filter_by(
+        user_id=student.id,
+        quiz_id=quiz_id,
+        status="in_progress"
+    ).order_by(models.QuizSession.attempt_number.desc()).first()
+    if existing:
+        # If it already expired, auto-finalize it before allowing a fresh start.
+        if now > existing.expires_at:
+            finalize_session(existing, db)
+        else:
+            return {"session_id": existing.id, "already_started": True}
     
     # Check time availability
     if now < quiz.available_from:
@@ -128,35 +187,68 @@ def start_quiz(quiz_id: int, db: Session = Depends(get_db), student: models.User
 @router.get("/sessions/{session_id}/resume")
 def resume_quiz(session_id: int, db: Session = Depends(get_db), student: models.User = Depends(auth.get_current_student)):
     session = db.query(models.QuizSession).filter_by(id=session_id, user_id=student.id).first()
-    if not session or session.status == "done":
+    if not session:
         raise HTTPException(status_code=404, detail="Active session not found")
+
+    # Auto-submit on next API call if the session has expired.
+    if session.status != "done" and get_utc_now() > session.expires_at:
+        finalize_session(session, db)
+        return {
+            "expired": True,
+            "session_id": session.id,
+            "result_released": session.result_released
+        }
+
+    if session.status == "done":
+        return {
+            "expired": True,
+            "session_id": session.id,
+            "result_released": session.result_released
+        }
     
     quiz = db.query(models.Quiz).filter_by(id=session.quiz_id).first()
 
     # CRITICAL: Fetch question content in the specific order saved in the session
     ordered_questions = []
+    missing_question_ids: list[int] = []
     for q_id in session.question_order:
         q = db.query(models.Question).filter_by(id=q_id).first()
-        if q:
+        # If a question gets deleted/changed after the session starts, we must not
+        # silently shrink the quiz length (it causes the UI to show Submit early).
+        # Instead, return a placeholder so the student can progress and the issue
+        # is visible/auditable.
+        if not q or q.quiz_id != session.quiz_id:
+            missing_question_ids.append(int(q_id))
             ordered_questions.append({
-                "id": q.id,
-                "body": q.body,
-                "type": q.type,
-                "options": q.options, # JSON list
-                "points": q.points
+                "id": int(q_id),
+                "body": "This question is no longer available (it may have been deleted after you started). You can continue.",
+                "type": "missing",
+                "options": [],
+                "points": 0
             })
+            continue
+
+        ordered_questions.append({
+            "id": q.id,
+            "body": q.body,
+            "type": q.type,
+            "options": q.options, # JSON list
+            "points": q.points
+        })
 
     # Fetch any answers already saved during this session
     answers = db.query(models.Answer).filter_by(session_id=session_id).all()
     ans_dict = {a.question_id: a.answer_value for a in answers}
 
     return {
+        "expired": False,
         "quiz": {
             "title": quiz.title,
             "anti_cheat_enabled": quiz.anti_cheat_enabled
         },
         "question_order": session.question_order,
         "questions": ordered_questions,
+        "missing_question_ids": missing_question_ids,
         "answers_so_far": ans_dict,
         "expires_at": session.expires_at,
         "server_now": get_utc_now() # Used by UI to sync the countdown timer
@@ -170,9 +262,8 @@ def save_answer(session_id: int, answer: schemas.AnswerCreate, db: Session = Dep
     
     # Check if time has expired
     if get_utc_now() > session.expires_at:
-        session.status = "done"
-        db.commit()
-        raise HTTPException(status_code=400, detail="Time expired")
+        finalize_session(session, db)
+        raise HTTPException(status_code=409, detail="Time expired")
 
     # Upsert answer (Save or Update)
     existing = db.query(models.Answer).filter_by(session_id=session_id, question_id=answer.question_id).first()
@@ -209,39 +300,15 @@ def log_cheat(session_id: int, cheat: schemas.CheatEventCreate, db: Session = De
 @router.post("/sessions/{session_id}/submit")
 def submit_quiz(session_id: int, db: Session = Depends(get_db), student: models.User = Depends(auth.get_current_student)):
     session = db.query(models.QuizSession).filter_by(id=session_id, user_id=student.id).first()
-    if not session or session.status == "done":
-        return {"message": "Already submitted"}
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
 
-    # 1. Fetch all quiz content and student answers
-    questions = db.query(models.Question).filter_by(quiz_id=session.quiz_id).all()
-    answers = db.query(models.Answer).filter_by(session_id=session_id).all()
-    ans_map = {a.question_id: a for a in answers}
+    # If already done (or time already expired), ensure it's finalized and return.
+    if session.status == "done" or get_utc_now() > session.expires_at:
+        finalize_session(session, db)
+        return {"message": "Submitted successfully", "result_released": session.result_released}
 
-    score = 0.0
-    has_qa = False
-
-    # 2. Score Multiple Choice (MCQ) automatically
-    for q in questions:
-        ans = ans_map.get(q.id)
-        if q.type == "mcq":
-            if ans:
-                is_correct = (ans.answer_value == q.correct_answer)
-                ans.is_correct = is_correct
-                ans.marks_awarded = q.points if is_correct else 0
-                ans.graded_at = get_utc_now()
-                score += ans.marks_awarded
-        else:
-            # Quiz contains Essay questions, so result cannot be released yet
-            has_qa = True
-
-    # 3. Finalize the session
-    session.status = "done"
-    session.submitted_at = get_utc_now()
-    session.score = score
-    # Release results instantly if there are no Q&A questions to be graded
-    session.result_released = not has_qa 
-
-    db.commit()
+    finalize_session(session, db)
     return {"message": "Submitted successfully", "result_released": session.result_released}
 
 @router.get("/sessions/{session_id}/result")

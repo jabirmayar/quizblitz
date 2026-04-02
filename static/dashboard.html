@@ -142,11 +142,6 @@
                 };
 
                 const getQuizState = (quiz) => {
-                    // Prefer server-computed UI state when available
-                    if (quiz.ui_state && ['upcoming', 'live', 'in_progress', 'completed', 'expired'].includes(quiz.ui_state)) {
-                        return quiz.ui_state;
-                    }
-
                     const now = currentTime.value.getTime();
                     const start = new Date(quiz.available_from + "Z").getTime();
                     const end = new Date(quiz.available_until + "Z").getTime();
@@ -155,7 +150,8 @@
                     if (quiz.session_status === 'done') return 'completed';
                     
                     // 2. Check if user has an active session
-                    if (quiz.session_status === 'in_progress' && now <= end) return 'in_progress';
+                    // Keep this purely session-driven so it doesn't flip to history when the entry window closes.
+                    if (quiz.session_status === 'in_progress') return 'in_progress';
 
                     // 3. Time-based states
                     if (now < start) return 'upcoming';

@@ -77,9 +77,14 @@
                         </label>
                         <input 
                             v-model="form.username" 
+                            @input="onUsernameInput"
+                            @keydown.space.prevent
+                            @paste="onUsernamePaste"
                             type="text" 
                             placeholder="AWKUM-123456789" 
                             class="input-field text-sm placeholder:text-neutral-800" 
+                            pattern="[A-Za-z0-9_-]+"
+                            title="Use letters, numbers, -, or _. No spaces."
                             required :disabled="loading"
                         >
                     </div>
@@ -159,11 +164,11 @@
                 const notification = ref({ show: false, message: '' });
 
                 const currentYear = computed(() => new Date().getFullYear());
-
-                const handleLogin = async () => {
-                    loading.value = true;
-                    notification.value.show = false;
-                    try {
+                
+                 const handleLogin = async () => {
+                     loading.value = true;
+                     notification.value.show = false;
+                     try {
                         const res = await api.post('/api/auth/login', form.value);
                         
                         localStorage.setItem('token', res.access_token);
@@ -177,12 +182,31 @@
                         loading.value = false;
                         notification.value.show = true;
                         notification.value.message = e.detail || 'Access Denied';
-                    }
-                };
+                     }
+                 };
 
-                return { config, form, loading, showPassword, notification, handleLogin, currentYear };
-            }
-        }).mount('#app');
+                 const sanitizeUsername = (v) => String(v || '').replace(/\\s+/g, '');
+
+                 const onUsernameInput = (e) => {
+                     const cleaned = sanitizeUsername(e && e.target ? e.target.value : form.value.username);
+                     if (e && e.target && e.target.value !== cleaned) e.target.value = cleaned;
+                     form.value.username = cleaned;
+                 };
+
+                 const onUsernamePaste = (e) => {
+                     try {
+                         const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+                         const cleaned = sanitizeUsername(text);
+                         e.preventDefault();
+                         form.value.username = sanitizeUsername((form.value.username || '') + cleaned);
+                     } catch (_) {
+                         // allow default paste if clipboard access fails; input handler will sanitize
+                     }
+                 };
+ 
+                return { config, form, loading, showPassword, notification, handleLogin, currentYear, onUsernameInput, onUsernamePaste };
+             }
+         }).mount('#app');
     </script>
 </body>
 </html>

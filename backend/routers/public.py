@@ -49,7 +49,6 @@ def register_student(user: schemas.UserCreate, request: Request, db: Session = D
     if user.form_started_at is not None:
         now_ms = int(now * 1000)
         started_at = int(user.form_started_at)
-        # ignore obviously bogus timestamps
         if 0 < started_at < (now_ms + 5000):
             delta = now_ms - started_at
             if 0 <= delta < 1500:

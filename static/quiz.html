@@ -51,7 +51,7 @@
                         <p class="text-white font-bold text-sm mt-1">Question {{ currentIndex + 1 }} of {{ questions.length }}</p>
                     </div>
                     <div class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                        {{ currentQuestion?.type === 'mcq' ? 'Multiple Choice' : 'Written Answer' }}
+                        {{ currentQuestion?.type === 'mcq' ? 'Multiple Choice' : (currentQuestion?.type === 'missing' ? 'Unavailable' : 'Written Answer') }}
                     </div>
                 </div>
 
@@ -72,6 +72,16 @@
                                    class="w-4 h-4 rounded-full border-zinc-700 bg-black text-blue-600 focus:ring-0">
                             <span class="text-zinc-300 group-hover:text-white transition-colors">{{ opt }}</span>
                         </label>
+                    </div>
+
+                    <!-- Missing Question UI -->
+                    <div v-else-if="currentQuestion.type === 'missing'" class="pl-16">
+                        <div class="bg-amber-500/10 border border-amber-500/20 p-5 rounded-2xl">
+                            <p class="text-[10px] font-bold text-amber-300 uppercase tracking-widest mb-2">Question Unavailable</p>
+                            <p class="text-sm text-zinc-300 leading-relaxed">
+                                This question was removed or changed after you started the quiz. You can continue to the next question.
+                            </p>
+                        </div>
                     </div>
 
                     <!-- Q&A UI -->
@@ -125,9 +135,23 @@
                     return `${m}:${s}`;
                 });
 
+                const parseServerUtcMs = (value) => {
+                    // Backend stores UTC datetimes as naive strings; make parsing consistent across browsers.
+                    if (!value) return NaN;
+                    let s = String(value).trim();
+                    // Normalize "YYYY-MM-DD HH:MM:SS" -> ISO-ish.
+                    s = s.replace(' ', 'T');
+                    // Truncate microseconds to milliseconds for broad Date parser compatibility.
+                    s = s.replace(/\.(\d{3})\d+/, '.$1');
+                    // If no timezone offset is present, treat it as UTC.
+                    if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(s)) s = `${s}Z`;
+                    const ms = Date.parse(s);
+                    return Number.isFinite(ms) ? ms : NaN;
+                };
+
                 const startTimer = (expiresAt, serverNow) => {
-                    const expiry = new Date(expiresAt).getTime();
-                    const now = new Date(serverNow).getTime();
+                    const expiry = parseServerUtcMs(expiresAt);
+                    const now = parseServerUtcMs(serverNow);
                     timeRemaining.value = Math.max(0, Math.floor((expiry - now) / 1000));
 
                     timerInterval = setInterval(() => {
@@ -145,6 +169,7 @@
                 const canProceed = computed(() => {
                     const q = currentQuestion.value;
                     if (!q) return false;
+                    if (q.type === 'missing') return true;
                     const val = answers.value[q.id];
                     if (q.type === 'mcq') return !!val;
                     return typeof val === 'string' && val.trim().length > 0;
@@ -171,6 +196,10 @@
 
                     try {
                         const res = await api.get(`/api/student/sessions/${sessionId.value}/resume`);
+                        if (res && res.expired) {
+                            window.location.href = `/result?session_id=${res.session_id || sessionId.value}`;
+                            return;
+                        }
                         quizData.value = res.quiz;
                         questions.value = res.questions;
                         answers.value = res.answers_so_far || {};
@@ -301,14 +330,22 @@
                         await api.post(`/api/student/sessions/${sessionId.value}/answer`, {
                             question_id: qid, answer_value: answers.value[qid] || ""
                         });
-                    } catch (e) { console.error('Auto-save error'); }
+                    } catch (e) {
+                        const detail = (e && e.detail) ? String(e.detail) : '';
+                        if (detail.toLowerCase().includes('time expired')) {
+                            clearInterval(timerInterval);
+                            window.location.href = `/result?session_id=${sessionId.value}`;
+                            return;
+                        }
+                        console.error('Auto-save error');
+                    }
                 };
 
                 const nextQuestion = async () => {
                     attemptedNext.value = true;
                     if (!canProceed.value) return;
                     const q = currentQuestion.value;
-                    if (q) await saveAnswer(q.id);
+                    if (q && q.type !== 'missing') await saveAnswer(q.id);
                     attemptedNext.value = false;
                     currentIndex.value = Math.min(questions.value.length - 1, currentIndex.value + 1);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -324,10 +361,18 @@
                     clearInterval(timerInterval);
                     try {
                         const q = currentQuestion.value;
-                        if (q) await saveAnswer(q.id);
+                        if (q && q.type !== 'missing') await saveAnswer(q.id);
                         await api.post(`/api/student/sessions/${sessionId.value}/submit`);
                         window.location.href = `/result?session_id=${sessionId.value}`;
-                    } catch (e) { alert("Submission failed."); isSubmitting.value = false; }
+                    } catch (e) {
+                        const detail = (e && e.detail) ? String(e.detail) : '';
+                        if (detail.toLowerCase().includes('time expired')) {
+                            window.location.href = `/result?session_id=${sessionId.value}`;
+                            return;
+                        }
+                        alert("Submission failed.");
+                        isSubmitting.value = false;
+                    }
                 };
 
                 onMounted(loadSession);
