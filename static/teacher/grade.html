@@ -73,23 +73,64 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Pagination -->
+            <div v-if="total" class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mt-8">
+                <div class="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">
+                    Showing {{ pageStart }}-{{ pageEnd }} of {{ total }}
+                </div>
+                <div class="flex items-center gap-3 justify-between sm:justify-end">
+                    <select v-model.number="pageSize" class="bg-black border border-zinc-800 text-zinc-300 text-[10px] font-bold px-3 py-2 rounded-xl uppercase tracking-wider">
+                        <option :value="5">5</option>
+                        <option :value="10">10</option>
+                        <option :value="20">20</option>
+                    </select>
+                    <div class="flex items-center gap-2">
+                        <button @click="prevPage" :disabled="page <= 1" class="btn-ghost px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-30">Prev</button>
+                        <span class="text-[10px] text-zinc-500 font-mono">{{ page }} / {{ pageCount }}</span>
+                        <button @click="nextPage" :disabled="page >= pageCount" class="btn-ghost px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-30">Next</button>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, computed, watch, onMounted } = Vue;
         const app = createApp({
             setup() {
                 const config = ref(CONFIG);
                 const sessionId = ref(new URLSearchParams(window.location.search).get('session_id'));
                 const answers = ref([]);
+                const total = ref(0);
+                const page = ref(1);
+                const pageSize = ref(10);
 
                 const loadAnswers = async () => {
                     try {
-                        const res = await api.get(`/api/teacher/sessions/${sessionId.value}/grade`);
-                        answers.value = (res || []).map(a => ({ ...a, saving: false }));
+                        const params = new URLSearchParams();
+                        params.append('page', String(page.value));
+                        params.append('page_size', String(pageSize.value));
+                        const res = await api.get(`/api/teacher/sessions/${sessionId.value}/grade/paged?${params.toString()}`);
+                        answers.value = ((res && res.items) ? res.items : []).map(a => ({ ...a, saving: false }));
+                        total.value = (res && typeof res.total === 'number') ? res.total : 0;
                     } catch (e) { console.error('Grade fetch failed'); }
                 };
+
+                const pageCount = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize.value)));
+                const pageStart = computed(() => {
+                    if (!total.value) return 0;
+                    return (page.value - 1) * pageSize.value + 1;
+                });
+                const pageEnd = computed(() => {
+                    if (!total.value) return 0;
+                    return Math.min(total.value, (page.value - 1) * pageSize.value + (answers.value.length || 0));
+                });
+                const prevPage = () => { page.value = Math.max(1, page.value - 1); };
+                const nextPage = () => { page.value = Math.min(pageCount.value, page.value + 1); };
+
+                watch(pageSize, async () => { page.value = 1; await loadAnswers(); });
+                watch(page, async () => { await loadAnswers(); });
 
                 const submitMark = async (ans) => {
                     if (ans.marks_awarded > ans.max_points) return alert(`Maximum marks allowed is ${ans.max_points}`);
@@ -97,9 +138,13 @@
                     try {
                         await api.post(`/api/teacher/answers/${ans.id}/grade`, { marks_awarded: ans.marks_awarded });
                         await loadAnswers();
-                        if (answers.value.length === 0) {
+                        if ((total.value || 0) === 0) {
                             history.back();
                             return;
+                        }
+                        if (answers.value.length === 0 && page.value > 1) {
+                            page.value = page.value - 1;
+                            await loadAnswers();
                         }
                     } catch (e) { alert("Save failed."); }
                     finally { ans.saving = false; }
@@ -112,7 +157,7 @@
 
                 const goBack = () => history.back();
 
-                return { config, answers, submitMark, goBack };
+                return { config, answers, total, page, pageSize, pageCount, pageStart, pageEnd, prevPage, nextPage, submitMark, goBack };
             }
         });
 

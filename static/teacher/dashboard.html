@@ -43,7 +43,7 @@
             </header>
 
             <div v-if="loading" class="py-20 text-center animate-pulse text-zinc-600 font-mono text-xs uppercase tracking-widest">
-                Syncing records...
+                Loading records...
             </div>
 
             <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -51,7 +51,7 @@
                     
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-white font-bold text-lg leading-tight pr-4">{{ quiz.title }}</h3>
-                        <!-- Confirmation added to toggle -->
+                        <!-- Confirmation to toggle -->
                         <button @click="togglePublish(quiz)" 
                                 :class="getQuizState(quiz)"
                                 class="state-pill shrink-0 cursor-pointer hover:ring-1 hover:ring-zinc-500 transition-all">

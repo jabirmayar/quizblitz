@@ -32,7 +32,7 @@
                     <h2 class="text-3xl font-bold text-white tracking-tight">Academic Analytics</h2>
                     <p class="text-zinc-500 mt-1">Cross-departmental performance metrics and integrity tracking.</p>
                 </div>
-                <button @click="openExportModal" v-if="results.length > 0" 
+                <button @click="openExportModal" v-if="total > 0" 
                         class="bg-white text-black text-[10px] font-bold px-4 py-2 rounded-lg uppercase tracking-widest hover:bg-zinc-200 transition">
                     Export
                 </button>
@@ -63,7 +63,7 @@
                         </select>
                     </div>
                     <div class="flex items-end">
-                        <button @click="fetchGlobalResults" 
+                        <button @click="applyFilters" 
                                 class="w-full py-3 bg-zinc-800 text-white text-[10px] font-bold uppercase rounded-xl hover:bg-zinc-700 transition tracking-widest">
                             Apply Filters
                         </button>
@@ -74,7 +74,7 @@
             <!-- Results Data Grid -->
             <div class="admin-card !p-0 overflow-hidden shadow-2xl">
                 <div v-if="loading" class="py-20 text-center">
-                    <div class="animate-pulse text-zinc-500 font-mono text-xs uppercase tracking-widest">Compiling Dataset...</div>
+                    <div class="animate-pulse text-zinc-500 font-mono text-xs uppercase tracking-widest">Loading...</div>
                 </div>
                 
                 <div v-else-if="results.length === 0" class="py-20 text-center">
@@ -146,6 +146,25 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div v-if="!loading && results.length" class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mt-6">
+                <div class="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">
+                    Showing {{ pageStart }}-{{ pageEnd }} of {{ total }}
+                </div>
+                <div class="flex items-center gap-3 justify-between sm:justify-end">
+                    <select v-model.number="pageSize" class="bg-black border border-zinc-800 text-zinc-300 text-[10px] font-bold px-3 py-2 rounded-xl uppercase tracking-wider">
+                        <option :value="25">25</option>
+                        <option :value="50">50</option>
+                        <option :value="100">100</option>
+                    </select>
+                    <div class="flex items-center gap-2">
+                        <button @click="prevPage" :disabled="page <= 1" class="btn-ghost px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-30">Prev</button>
+                        <span class="text-[10px] text-zinc-500 font-mono">{{ page }} / {{ pageCount }}</span>
+                        <button @click="nextPage" :disabled="page >= pageCount" class="btn-ghost px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-30">Next</button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -249,12 +268,13 @@
     </div>
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, computed, watch, onMounted } = Vue;
         const app = createApp({
             setup() {
                 const config = ref(CONFIG);
                 const loading = ref(false);
                 const results = ref([]);
+                const total = ref(0);
                 const departments = ref([]);
                 const semesters = ref([]);
                 const classes = ref([]);
@@ -267,6 +287,8 @@
                 const overrideReason = ref('');
                 const overrideSubmitting = ref(false);
                 const exportModalOpen = ref(false);
+                const page = ref(1);
+                const pageSize = ref(25);
 
                 const loadDepartments = async () => {
                     departments.value = await api.get('/api/admin/departments') || [];
@@ -292,14 +314,46 @@
                         if(filters.value.deptId) params.append('dept_id', filters.value.deptId);
                         if(filters.value.semId) params.append('sem_id', filters.value.semId);
                         if(filters.value.classId) params.append('class_id', filters.value.classId);
+                        params.append('page', String(page.value));
+                        params.append('page_size', String(pageSize.value));
 
-                        results.value = await api.get(`/api/admin/global-results?${params.toString()}`) || [];
+                        const res = await api.get(`/api/admin/global-results/paged?${params.toString()}`);
+                        results.value = (res && res.items) ? res.items : [];
+                        total.value = (res && typeof res.total === 'number') ? res.total : 0;
                     } catch (e) { 
                         console.error('Filter Error'); 
                     } finally { 
                         loading.value = false; 
                     }
                 };
+
+                const applyFilters = async () => {
+                    if (page.value !== 1) {
+                        page.value = 1; // watcher will fetch
+                        return;
+                    }
+                    await fetchGlobalResults();
+                };
+
+                const pageCount = computed(() => {
+                    return Math.max(1, Math.ceil((total.value || 0) / pageSize.value));
+                });
+
+                const pageStart = computed(() => {
+                    if (!total.value) return 0;
+                    return (page.value - 1) * pageSize.value + 1;
+                });
+
+                const pageEnd = computed(() => {
+                    if (!total.value) return 0;
+                    return Math.min(total.value, (page.value - 1) * pageSize.value + (results.value.length || 0));
+                });
+
+                const prevPage = () => { page.value = Math.max(1, page.value - 1); };
+                const nextPage = () => { page.value = Math.min(pageCount.value, page.value + 1); };
+
+                watch(pageSize, async () => { page.value = 1; await fetchGlobalResults(); });
+                watch(page, async () => { await fetchGlobalResults(); });
 
                 const openExportModal = () => { exportModalOpen.value = true; };
                 const closeExportModal = () => { exportModalOpen.value = false; };
@@ -323,8 +377,9 @@
                     return needsQuotes ? `"${safe}"` : safe;
                 };
 
-                const buildExportRows = () => {
-                    return (results.value || []).map(r => {
+                const buildExportRows = (list = null) => {
+                    const src = list || results.value || [];
+                    return src.map(r => {
                         const cheatEvents = (r.cheat_events || []).map(e => {
                             const label = formatEventType(e.event_type);
                             const detail = formatEventDetail(e);
@@ -351,8 +406,39 @@
                     });
                 };
 
-                const exportData = (format) => {
-                    const rows = buildExportRows();
+                const fetchAllForExport = async () => {
+                    if ((total.value || 0) <= (results.value || []).length && page.value === 1) return results.value || [];
+
+                    const exportPageSize = 200; // backend max
+                    const all = [];
+                    let currentPage = 1;
+                    let expectedTotal = null;
+
+                    while (true) {
+                        const params = new URLSearchParams();
+                        if(filters.value.deptId) params.append('dept_id', filters.value.deptId);
+                        if(filters.value.semId) params.append('sem_id', filters.value.semId);
+                        if(filters.value.classId) params.append('class_id', filters.value.classId);
+                        params.append('page', String(currentPage));
+                        params.append('page_size', String(exportPageSize));
+
+                        const res = await api.get(`/api/admin/global-results/paged?${params.toString()}`);
+                        const batch = (res && res.items) ? res.items : [];
+                        if (expectedTotal === null) expectedTotal = (res && typeof res.total === 'number') ? res.total : 0;
+                        all.push(...batch);
+
+                        if (!batch.length) break;
+                        if (all.length >= expectedTotal) break;
+                        currentPage += 1;
+                        if (currentPage > 2000) break; // safety
+                    }
+
+                    return all;
+                };
+
+                const exportData = async (format) => {
+                    const all = await fetchAllForExport();
+                    const rows = buildExportRows(all);
                     if (!rows.length) return;
 
                     const sanitizeFilename = (name) => {
@@ -546,12 +632,13 @@
                 });
 
                 return {
-                    config, loading, results, departments, semesters, classes, filters,
+                    config, loading, results, total, departments, semesters, classes, filters,
+                    page, pageSize, pageCount, pageStart, pageEnd, prevPage, nextPage,
                     showModal, selectedResult, showCheatEvents, closeModal,
                     overrideModalOpen, overrideMode, overrideTarget, overrideReason, overrideSubmitting,
                     openOverrideModal, closeOverrideModal, submitOverride,
                     exportModalOpen, openExportModal, closeExportModal, exportData,
-                    loadSemesters, loadClasses, fetchGlobalResults,
+                    loadSemesters, loadClasses, fetchGlobalResults, applyFilters,
                     formatEventType, formatEventDetail, formatTimestamp,
                     overrideZero, clearOverride
                 };

@@ -86,7 +86,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="s in filteredStudents" :key="s.id" class="group hover:bg-white/[0.01] transition-colors">
+                        <tr v-for="s in students" :key="s.id" class="group hover:bg-white/[0.01] transition-colors">
                             <td class="text-center">
                                 <input type="checkbox" :value="s.id" v-model="selectedIds" class="w-4 h-4 rounded border-zinc-800 bg-black text-blue-600 focus:ring-0">
                             </td>
@@ -106,6 +106,25 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mt-6">
+                <div class="text-[10px] text-zinc-600 font-mono uppercase tracking-widest">
+                    Showing {{ pageStart }}-{{ pageEnd }} of {{ total }}
+                </div>
+                <div class="flex items-center gap-3 justify-between sm:justify-end">
+                    <select v-model.number="pageSize" class="bg-black border border-zinc-800 text-zinc-300 text-[10px] font-bold px-3 py-2 rounded-xl uppercase tracking-wider">
+                        <option :value="25">25</option>
+                        <option :value="50">50</option>
+                        <option :value="100">100</option>
+                    </select>
+                    <div class="flex items-center gap-2">
+                        <button @click="prevPage" :disabled="page <= 1" class="btn-ghost px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-30">Prev</button>
+                        <span class="text-[10px] text-zinc-500 font-mono">{{ page }} / {{ pageCount }}</span>
+                        <button @click="nextPage" :disabled="page >= pageCount" class="btn-ghost px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-30">Next</button>
+                    </div>
                 </div>
             </div>
 
@@ -140,11 +159,12 @@
     </div>
 
     <script>
-        const { createApp, ref, computed, onMounted } = Vue;
+        const { createApp, ref, computed, watch, onMounted } = Vue;
         const app = createApp({
             setup() {
                 const config = ref(CONFIG);
                 const students = ref([]);
+                const total = ref(0);
                 const departments = ref([]);
                 const sems = ref([]);
                 const classes = ref([]);
@@ -152,25 +172,46 @@
                 
                 const search = ref('');
                 const filters = ref({ deptId: null, semId: null, classId: null });
+                const page = ref(1);
+                const pageSize = ref(25);
                 
                 const selectedIds = ref([]);
                 const destinationClassId = ref(null);
                 const resetModal = ref({ show: false, user: null, password: '' });
 
                 const loadInitial = async () => {
-                    const [sRes, dRes, cAll] = await Promise.all([
-                        api.get('/api/admin/users?role=student'),
+                    const [dRes, cAll] = await Promise.all([
                         api.get('/api/admin/departments'),
                         api.get('/api/admin/classes')
                     ]);
-                    students.value = sRes || [];
                     departments.value = dRes || [];
                     allClasses.value = cAll || [];
+                    await fetchStudents();
+                };
+
+                const fetchStudents = async () => {
+                    const params = new URLSearchParams();
+                    params.set('page', String(page.value));
+                    params.set('page_size', String(pageSize.value));
+                    if (filters.value.deptId) params.set('dept_id', String(filters.value.deptId));
+                    if (filters.value.semId) params.set('sem_id', String(filters.value.semId));
+                    if (filters.value.classId) params.set('class_id', String(filters.value.classId));
+                    if (search.value && search.value.trim()) params.set('q', search.value.trim());
+
+                    const res = await api.get(`/api/admin/students?${params.toString()}`);
+                    students.value = (res && res.items) ? res.items : [];
+                    total.value = (res && typeof res.total === 'number') ? res.total : 0;
                 };
 
                 const onDeptChange = async () => {
                     filters.value.semId = null; filters.value.classId = null;
-                    if (!filters.value.deptId) { sems.value = []; return; }
+                    if (!filters.value.deptId) {
+                        sems.value = [];
+                        classes.value = [];
+                        page.value = 1;
+                        await fetchStudents();
+                        return;
+                    }
                     
                     const res = await api.get(`/api/admin/departments/${filters.value.deptId}/semesters`);
                     // Sort by year desc and season (Fall > Spring)
@@ -179,41 +220,53 @@
                     // AUTO-SELECT LATEST SESSION
                     if (sems.value.length > 0) {
                         filters.value.semId = sems.value[0].id;
-                        onSessionChange();
+                        await onSessionChange();
                     }
+                    page.value = 1;
+                    await fetchStudents();
                 };
 
                 const onSessionChange = async () => {
                     filters.value.classId = null;
-                    if (!filters.value.semId) { classes.value = []; return; }
+                    if (!filters.value.semId) {
+                        classes.value = [];
+                        page.value = 1;
+                        await fetchStudents();
+                        return;
+                    }
                     classes.value = await api.get(`/api/admin/semesters/${filters.value.semId}/classes?department_id=${filters.value.deptId}`) || [];
+                    page.value = 1;
+                    await fetchStudents();
                 };
 
-                const filteredStudents = computed(() => {
-                    let list = students.value;
-                    if (filters.value.classId) {
-                        const target = allClasses.value.find(c => c.id === filters.value.classId)?.name;
-                        list = list.filter(s => s.class_name === target);
-                    } else if (filters.value.semId) {
-                        // Broad filter: get all class names for this session
-                        const validClassNames = classes.value.map(c => c.name);
-                        list = list.filter(s => validClassNames.includes(s.class_name));
-                    }
-                    if (search.value) {
-                        const q = search.value.toLowerCase();
-                        list = list.filter(s => s.display_name.toLowerCase().includes(q) || s.registration_id.toLowerCase().includes(q));
-                    }
-                    return list;
+                const pageCount = computed(() => Math.max(1, Math.ceil((total.value || 0) / pageSize.value)));
+                const pageStart = computed(() => {
+                    if (!total.value) return 0;
+                    return (page.value - 1) * pageSize.value + 1;
+                });
+                const pageEnd = computed(() => {
+                    if (!total.value) return 0;
+                    return Math.min(total.value, (page.value - 1) * pageSize.value + (students.value.length || 0));
                 });
 
-                const isAllSelected = computed(() => filteredStudents.value.length > 0 && selectedIds.value.length === filteredStudents.value.length);
-                const toggleAll = (e) => { selectedIds.value = e.target.checked ? filteredStudents.value.map(s => s.id) : []; };
+                const prevPage = () => { page.value = Math.max(1, page.value - 1); };
+                const nextPage = () => { page.value = Math.min(pageCount.value, page.value + 1); };
+
+                const isAllSelected = computed(() => students.value.length > 0 && students.value.every(s => selectedIds.value.includes(s.id)));
+                const toggleAll = (e) => {
+                    const ids = students.value.map(s => s.id);
+                    if (e.target.checked) {
+                        selectedIds.value = Array.from(new Set([...selectedIds.value, ...ids]));
+                    } else {
+                        selectedIds.value = selectedIds.value.filter(id => !ids.includes(id));
+                    }
+                };
 
                 const bulkMove = async () => {
                     try {
                         await api.post('/api/admin/students/bulk-move', { student_ids: selectedIds.value, new_class_id: destinationClassId.value });
                         selectedIds.value = []; destinationClassId.value = null;
-                        await loadInitial();
+                        await fetchStudents();
                         alert("Migration complete.");
                     } catch (e) { alert("Error"); }
                 };
@@ -226,8 +279,38 @@
 
                 const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('role'); window.location.href = '/'; };
 
+                let searchTimer = null;
+                watch(search, () => {
+                    if (searchTimer) clearTimeout(searchTimer);
+                    searchTimer = setTimeout(async () => {
+                        page.value = 1;
+                        await fetchStudents();
+                    }, 250);
+                });
+
+                watch(pageSize, async () => {
+                    page.value = 1;
+                    await fetchStudents();
+                });
+
+                watch(page, async () => {
+                    await fetchStudents();
+                });
+
+                watch(() => filters.value.classId, async () => {
+                    page.value = 1;
+                    await fetchStudents();
+                });
+
                 onMounted(loadInitial);
-                return { config, students, departments, sems, classes, allClasses, search, filters, selectedIds, destinationClassId, resetModal, isAllSelected, toggleAll, onDeptChange, onSessionChange, filteredStudents, bulkMove, openResetModal, submitReset, logout };
+                return {
+                    config, students, total, departments, sems, classes, allClasses,
+                    search, filters,
+                    page, pageSize, pageCount, pageStart, pageEnd, prevPage, nextPage,
+                    selectedIds, destinationClassId, resetModal, isAllSelected, toggleAll,
+                    onDeptChange, onSessionChange,
+                    bulkMove, openResetModal, submitReset, logout
+                };
             }
         });
 

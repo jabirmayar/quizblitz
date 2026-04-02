@@ -11,6 +11,12 @@ router = APIRouter(prefix="/teacher", tags=["Teacher"])
 def get_utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+def normalize_pagination(page: int = 1, page_size: int = 50, max_page_size: int = 200) -> tuple[int, int, int]:
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(1, min(int(page_size or 50), int(max_page_size)))
+    offset = (safe_page - 1) * safe_page_size
+    return safe_page, safe_page_size, offset
+
 def ensure_questions_mutable(quiz_id: int, db: Session):
     """
     Prevent quiz question edits once any student has started an attempt.
@@ -282,6 +288,91 @@ def get_quiz_results(quiz_id: int, db: Session = Depends(get_db), teacher: model
         db.commit()
     return {"quiz": {"title": quiz.title}, "sessions": res_list}
 
+@router.get("/quizzes/{quiz_id}/results/paged")
+def get_quiz_results_paged(
+    quiz_id: int,
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+    teacher: models.User = Depends(auth.get_current_teacher)
+):
+    safe_page, safe_page_size, offset = normalize_pagination(page, page_size, max_page_size=200)
+
+    quiz = db.query(models.Quiz).filter_by(id=quiz_id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    # Single class label (best-effort) for this quiz
+    class_link = db.query(models.QuizClass).filter_by(quiz_id=quiz_id).order_by(models.QuizClass.class_id.asc()).first()
+    class_obj = db.query(models.Class).get(class_link.class_id) if class_link else None
+    class_name = class_obj.name if class_obj else "General"
+
+    total_points_raw = db.query(models.Question).filter_by(quiz_id=quiz_id).with_entities(func.sum(models.Question.points)).scalar()
+    total_points = float(total_points_raw or 0)
+
+    base = db.query(models.QuizSession).filter_by(quiz_id=quiz_id)
+    total = base.count()
+    sessions = base.order_by(models.QuizSession.id.desc()).offset(offset).limit(safe_page_size).all()
+
+    session_ids = [s.id for s in sessions]
+    cheat_events = []
+    if session_ids:
+        cheat_events = db.query(models.CheatEvent).filter(models.CheatEvent.session_id.in_(session_ids))\
+            .order_by(models.CheatEvent.occurred_at).all()
+
+    events_by_session: dict[int, list[models.CheatEvent]] = {}
+    for e in cheat_events:
+        events_by_session.setdefault(e.session_id, []).append(e)
+
+    # Fetch students for page in one query
+    student_ids = [s.user_id for s in sessions]
+    students = db.query(models.User.id, models.User.display_name, models.User.registration_id)\
+        .filter(models.User.id.in_(student_ids)).all() if student_ids else []
+    student_map = {u.id: u for u in students}
+
+    any_flag_repairs = False
+    items = []
+    for s in sessions:
+        u = student_map.get(s.user_id)
+        events = events_by_session.get(s.id, [])
+        computed_flag_count = len(events)
+        if s.cheat_flag_count != computed_flag_count:
+            s.cheat_flag_count = computed_flag_count
+            any_flag_repairs = True
+
+        effective_score = float(s.score_override if s.score_override is not None else (s.score or 0))
+        percentage_score = (effective_score / total_points * 100) if total_points > 0 else 0
+        is_passed = percentage_score >= float(quiz.pass_percentage or 0)
+
+        items.append({
+            "id": s.id,
+            "class_name": class_name,
+            "student_name": (u.display_name if u else "Unknown"),
+            "registration_id": (u.registration_id if u else "unknown"),
+            "status": s.status,
+            "score": effective_score,
+            "raw_score": s.score,
+            "is_score_overridden": s.score_override is not None,
+            "score_override_reason": s.score_override_reason,
+            "total_points": total_points,
+            "result_released": s.result_released,
+            "cheat_flag_count": computed_flag_count,
+            "cheat_events": [{
+                "id": e.id,
+                "event_type": e.event_type,
+                "occurred_at": e.occurred_at.isoformat() if e.occurred_at else None,
+                "detail": e.detail
+            } for e in events],
+            "pass_percentage": float(quiz.pass_percentage or 0),
+            "percentage_score": round(percentage_score, 1),
+            "is_passed": is_passed
+        })
+
+    if any_flag_repairs:
+        db.commit()
+
+    return {"quiz": {"title": quiz.title}, "items": items, "total": total, "page": safe_page, "page_size": safe_page_size}
+
 @router.get("/sessions/{session_id}/grade")
 def get_session_grading(session_id: int, db: Session = Depends(get_db), teacher: models.User = Depends(auth.get_current_teacher)):
     results = db.query(models.Answer, models.Question).join(
@@ -300,6 +391,38 @@ def get_session_grading(session_id: int, db: Session = Depends(get_db), teacher:
         "marks_awarded": ans.marks_awarded,
         "is_overridden": ans.is_overridden
     } for ans, q in results]
+
+@router.get("/sessions/{session_id}/grade/paged")
+def get_session_grading_paged(
+    session_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    db: Session = Depends(get_db),
+    teacher: models.User = Depends(auth.get_current_teacher)
+):
+    safe_page, safe_page_size, offset = normalize_pagination(page, page_size, max_page_size=100)
+
+    base = db.query(models.Answer, models.Question).join(
+        models.Question, models.Answer.question_id == models.Question.id
+    ).filter(
+        models.Answer.session_id == session_id,
+        models.Question.type == "qa",
+        models.Answer.graded_at == None
+    )
+
+    total = base.count()
+    rows = base.order_by(models.Answer.id.asc()).offset(offset).limit(safe_page_size).all()
+
+    items = [{
+        "id": ans.id,
+        "question_body": q.body,
+        "max_points": q.points,
+        "answer_value": ans.answer_value,
+        "marks_awarded": ans.marks_awarded,
+        "is_overridden": ans.is_overridden
+    } for ans, q in rows]
+
+    return {"items": items, "total": total, "page": safe_page, "page_size": safe_page_size}
 
 @router.post("/answers/{answer_id}/grade")
 def submit_grade(answer_id: int, grade: schemas.GradeSubmit, db: Session = Depends(get_db), teacher: models.User = Depends(auth.get_current_teacher)):

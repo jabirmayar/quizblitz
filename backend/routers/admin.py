@@ -13,6 +13,12 @@ router = APIRouter(tags=["Admin"])
 def get_utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+def normalize_pagination(page: int = 1, page_size: int = 50, max_page_size: int = 200) -> tuple[int, int, int]:
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(1, min(int(page_size or 50), int(max_page_size)))
+    offset = (safe_page - 1) * safe_page_size
+    return safe_page, safe_page_size, offset
+
 # ==========================================
 # 1. DEPARTMENTS
 # ==========================================
@@ -436,6 +442,68 @@ def list_users(role: Optional[str] = None, db: Session = Depends(get_db), admin:
         res.append(data)
     return res
 
+@router.get("/students")
+def list_students_paged(
+    dept_id: Optional[int] = None,
+    sem_id: Optional[int] = None,
+    class_id: Optional[int] = None,
+    q: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(auth.get_current_admin)
+):
+    safe_page, safe_page_size, offset = normalize_pagination(page, page_size, max_page_size=200)
+
+    # One class per student (best-effort): pick the smallest class_id link.
+    sc_one = db.query(
+        models.StudentClass.student_id.label("student_id"),
+        func.min(models.StudentClass.class_id).label("class_id")
+    ).group_by(models.StudentClass.student_id).subquery()
+
+    query = db.query(
+        models.User.id,
+        models.User.registration_id,
+        models.User.display_name,
+        models.User.is_active,
+        models.User.created_at,
+        sc_one.c.class_id.label("class_id"),
+        models.Class.name.label("class_name"),
+    ).outerjoin(sc_one, sc_one.c.student_id == models.User.id)\
+     .outerjoin(models.Class, models.Class.id == sc_one.c.class_id)\
+     .outerjoin(models.Program, models.Program.id == models.Class.program_id)
+
+    query = query.filter(models.User.role == "student")
+
+    if dept_id is not None:
+        query = query.filter(models.Program.department_id == dept_id)
+    if sem_id is not None:
+        query = query.filter(models.Class.semester_id == sem_id)
+    if class_id is not None:
+        query = query.filter(sc_one.c.class_id == class_id)
+
+    if q:
+        q_norm = f"%{q.strip().lower()}%"
+        query = query.filter(
+            func.lower(models.User.display_name).like(q_norm) |
+            func.lower(models.User.registration_id).like(q_norm)
+        )
+
+    total = query.count()
+    rows = query.order_by(models.User.created_at.desc()).offset(offset).limit(safe_page_size).all()
+
+    items = [{
+        "id": r.id,
+        "registration_id": r.registration_id,
+        "display_name": r.display_name,
+        "is_active": r.is_active,
+        "created_at": r.created_at,
+        "class_id": r.class_id,
+        "class_name": r.class_name or "Unassigned",
+    } for r in rows]
+
+    return {"items": items, "total": total, "page": safe_page, "page_size": safe_page_size}
+
 @router.get("/global-results")
 def get_global_results(dept_id: Optional[int] = None, sem_id: Optional[int] = None, class_id: Optional[int] = None, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):
     query = db.query(models.QuizSession).filter(models.QuizSession.status == "done")
@@ -494,6 +562,112 @@ def get_global_results(dept_id: Optional[int] = None, sem_id: Optional[int] = No
     if any_flag_repairs:
         db.commit()
     return output
+
+@router.get("/global-results/paged")
+def get_global_results_paged(
+    dept_id: Optional[int] = None,
+    sem_id: Optional[int] = None,
+    class_id: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+    admin_user: models.User = Depends(auth.get_current_admin)
+):
+    safe_page, safe_page_size, offset = normalize_pagination(page, page_size, max_page_size=200)
+
+    # Quiz -> (first) class mapping to avoid exploding rows when a quiz is assigned to multiple classes.
+    qc_one = db.query(
+        models.QuizClass.quiz_id.label("quiz_id"),
+        func.min(models.QuizClass.class_id).label("class_id")
+    ).group_by(models.QuizClass.quiz_id).subquery()
+
+    # Total points per quiz
+    tp = db.query(
+        models.Question.quiz_id.label("quiz_id"),
+        func.coalesce(func.sum(models.Question.points), 0).label("total_points")
+    ).group_by(models.Question.quiz_id).subquery()
+
+    base = db.query(
+        models.QuizSession,
+        models.User.display_name.label("student_name"),
+        models.User.registration_id.label("registration_id"),
+        models.Quiz.title.label("quiz_title"),
+        models.Quiz.pass_percentage.label("pass_percentage"),
+        models.Class.name.label("class_name"),
+        tp.c.total_points.label("total_points"),
+    ).join(models.User, models.User.id == models.QuizSession.user_id)\
+     .join(models.Quiz, models.Quiz.id == models.QuizSession.quiz_id)\
+     .outerjoin(qc_one, qc_one.c.quiz_id == models.Quiz.id)\
+     .outerjoin(models.Class, models.Class.id == qc_one.c.class_id)\
+     .outerjoin(models.Program, models.Program.id == models.Class.program_id)\
+     .outerjoin(tp, tp.c.quiz_id == models.Quiz.id)\
+     .filter(models.QuizSession.status == "done")
+
+    if dept_id is not None:
+        base = base.filter(models.Program.department_id == dept_id)
+    if sem_id is not None:
+        base = base.filter(models.Class.semester_id == sem_id)
+    if class_id is not None:
+        base = base.filter(models.Class.id == class_id)
+
+    total = base.count()
+
+    rows = base.order_by(models.QuizSession.submitted_at.desc(), models.QuizSession.id.desc())\
+        .offset(offset).limit(safe_page_size).all()
+
+    session_ids = [r.QuizSession.id for r in rows]
+    cheat_events = []
+    if session_ids:
+        cheat_events = db.query(models.CheatEvent).filter(models.CheatEvent.session_id.in_(session_ids))\
+            .order_by(models.CheatEvent.occurred_at).all()
+
+    events_by_session: dict[int, list[models.CheatEvent]] = {}
+    for e in cheat_events:
+        events_by_session.setdefault(e.session_id, []).append(e)
+
+    any_flag_repairs = False
+    items = []
+    for r in rows:
+        s = r.QuizSession
+        events = events_by_session.get(s.id, [])
+        computed_flag_count = len(events)
+        if s.cheat_flag_count != computed_flag_count:
+            s.cheat_flag_count = computed_flag_count
+            any_flag_repairs = True
+
+        total_points = float(r.total_points or 0)
+        effective_score = float(s.score_override if s.score_override is not None else (s.score or 0))
+        percentage_score = (effective_score / total_points * 100) if total_points > 0 else 0
+        is_passed = percentage_score >= float(r.pass_percentage or 0)
+
+        items.append({
+            "id": s.id,
+            "student_name": r.student_name,
+            "registration_id": r.registration_id,
+            "quiz_title": r.quiz_title,
+            "class_name": r.class_name or "Unknown",
+            "score": effective_score,
+            "raw_score": s.score,
+            "is_score_overridden": s.score_override is not None,
+            "score_override_reason": s.score_override_reason,
+            "total_points": total_points,
+            "flags": computed_flag_count,
+            "cheat_events": [{
+                "id": e.id,
+                "event_type": e.event_type,
+                "occurred_at": e.occurred_at.isoformat() if e.occurred_at else None,
+                "detail": e.detail
+            } for e in events],
+            "submitted_at": s.submitted_at,
+            "pass_percentage": float(r.pass_percentage or 0),
+            "percentage_score": round(percentage_score, 1),
+            "is_passed": is_passed
+        })
+
+    if any_flag_repairs:
+        db.commit()
+
+    return {"items": items, "total": total, "page": safe_page, "page_size": safe_page_size}
 
 @router.post("/sessions/{session_id}/override-zero")
 def admin_override_session_zero(session_id: int, data: schemas.SessionZeroOverride, db: Session = Depends(get_db), admin_user: models.User = Depends(auth.get_current_admin)):

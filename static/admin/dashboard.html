@@ -32,7 +32,7 @@
             <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
                 <div>
                     <h2 class="text-3xl font-bold text-white tracking-tight">Overview</h2>
-                    <p class="text-zinc-500 mt-1">Global management of students, faculty, and school structure.</p>
+                    <p class="text-zinc-500 mt-1">Manage users, classes, and academic structure across the institution.</p>
                 </div>
                 
                 <!-- Simple Stat Row -->
@@ -52,8 +52,8 @@
                     <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                     </div>
-                    <h3 class="text-xl font-bold text-white mb-2">School Structure</h3>
-                    <p class="text-zinc-500 leading-relaxed">Organize departments, active semesters, and class registrations across the institution.</p>
+                    <h3 class="text-xl font-bold text-white mb-2">Academic Structure</h3>
+                    <p class="text-zinc-500 leading-relaxed">Manage departments, semesters, classes, and subjects.</p>
                 </a>
 
                 <!-- Teacher Management -->
@@ -61,8 +61,8 @@
                     <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     </div>
-                    <h3 class="text-xl font-bold text-white mb-2">Faculty Management</h3>
-                    <p class="text-zinc-500 leading-relaxed">Create instructor accounts, manage credentials, and assign teachers to specific classes.</p>
+                    <h3 class="text-xl font-bold text-white mb-2">Faculty & Assignments</h3>
+                    <p class="text-zinc-500 leading-relaxed">Create teacher accounts, reset credentials, and manage class/subject assignments.</p>
                 </a>
 
                 <!-- Student Records -->
@@ -70,8 +70,8 @@
                     <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
                     </div>
-                    <h3 class="text-xl font-bold text-white mb-2">Student Directory</h3>
-                    <p class="text-zinc-500 leading-relaxed">Monitor student registrations, verify class enrollments, and handle bulk data migration.</p>
+                    <h3 class="text-xl font-bold text-white mb-2">Students</h3>
+                    <p class="text-zinc-500 leading-relaxed">Search students, reset passwords, and bulk-move students between class groups.</p>
                 </a>
 
                 <!-- Reporting -->
@@ -79,8 +79,8 @@
                     <div class="text-zinc-500 group-hover:text-white transition-colors mb-6">
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
                     </div>
-                    <h3 class="text-xl font-bold text-white mb-2">Global Reporting</h3>
-                    <p class="text-zinc-500 leading-relaxed">View school-wide performance metrics, review integrity flags, and export exam results.</p>
+                    <h3 class="text-xl font-bold text-white mb-2">Results & Integrity</h3>
+                    <p class="text-zinc-500 leading-relaxed">Review performance, integrity flags, and export results.</p>
                 </a>
 
             </section>
@@ -100,12 +100,12 @@
 
                 const loadStats = async () => {
                     try {
-                        const [students, classes, teachers] = await Promise.all([
-                            api.get('/api/admin/users?role=student'),
+                        const [studentsPaged, classes, teachers] = await Promise.all([
+                            api.get('/api/admin/students?page=1&page_size=1'),
                             api.get('/api/admin/classes'),
                             api.get('/api/admin/users?role=teacher')
                         ]);
-                        stats.value[0].value = students.length;
+                        stats.value[0].value = (studentsPaged && typeof studentsPaged.total === 'number') ? studentsPaged.total : 0;
                         stats.value[1].value = classes.length;
                         stats.value[2].value = teachers.length;
                     } catch (e) { console.error("Stats API error"); }
